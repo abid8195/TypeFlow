@@ -1,0 +1,13 @@
+{
+  "name": "my-app",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "engines": { "node": ">=22" },
+  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "scripts": {
+    "dev": "pnpm --filter @my-app/web dev",
+    "build": "pnpm --filter @my-app/web build",
+    "preview": "pnpm --filter @my-app/web preview",
+    "typecheck": "pnpm --filter @my-app/web exec tsc -b"
+  }
+}
