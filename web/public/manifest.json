@@ -49,5 +49,6 @@
       ]
     }
   ],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "min_viewport_width": 360
 }

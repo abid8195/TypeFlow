@@ -7,7 +7,7 @@ export function Footer() {
           href="https://freeappstore.online"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[color:var(--color-accent)] hover:underline underline-offset-2 transition-colors"
+          className="text-[color:var(--color-cta)] hover:underline underline-offset-2 transition-colors"
         >
           FreeAppStore
         </a>

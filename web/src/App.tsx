@@ -196,7 +196,10 @@ export default function App() {
     return (
       <div className="h-[100svh] w-screen flex items-center justify-center bg-[color:var(--paper)]">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[color:var(--color-accent)] to-[color:var(--color-accent-secondary)] animate-[pulse-subtle_1s_ease-in-out_infinite]" />
+          <div
+            className="w-10 h-10 rounded-xl animate-[pulse-subtle_1s_ease-in-out_infinite]"
+            style={{ background: 'var(--gradient-cta)' }}
+          />
           <p className="text-[color:var(--muted)] text-sm">Loading…</p>
         </div>
       </div>
@@ -252,7 +255,7 @@ export default function App() {
             <div className="text-center">
               <h1
                 className="font-[family-name:var(--font-heading)] font-bold text-4xl sm:text-5xl"
-                style={{ background: 'linear-gradient(90deg,#00d9ff,#7c3aed)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
+                style={{ background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
               >
                 TypeFlow
               </h1>
@@ -276,8 +279,8 @@ export default function App() {
               {/* Start button — inside the card */}
               <button
                 onClick={startTest}
-                style={{ background: 'linear-gradient(135deg, #00d9ff 0%, #7c3aed 100%)' }}
-                className="w-full py-3.5 rounded-[var(--radius-btn)] font-[family-name:var(--font-heading)] font-bold text-lg text-black shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-h-[48px]"
+                style={{ background: 'var(--gradient-cta)', color: 'var(--paper)' }}
+                className="w-full py-3.5 rounded-[var(--radius-btn)] font-[family-name:var(--font-heading)] font-bold text-lg shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-h-[48px]"
               >
                 Start Test
               </button>
@@ -287,11 +290,11 @@ export default function App() {
             <div className="w-full grid grid-cols-3 gap-2">
               <div className="rounded-xl border border-[color:var(--line)] bg-[var(--glass)] p-3 text-center">
                 <p className="text-[color:var(--muted)] text-[10px] font-semibold uppercase tracking-widest mb-0.5">Best</p>
-                <p className="font-[family-name:var(--font-heading)] font-bold text-2xl text-[color:var(--color-accent)] tabular-nums">{bestWPM}</p>
+                <p className="font-[family-name:var(--font-heading)] font-bold text-2xl text-[color:var(--color-cta)] tabular-nums">{bestWPM}</p>
               </div>
               <div className="rounded-xl border border-[color:var(--line)] bg-[var(--glass)] p-3 text-center">
                 <p className="text-[color:var(--muted)] text-[10px] font-semibold uppercase tracking-widest mb-0.5">Streak</p>
-                <p className="font-[family-name:var(--font-heading)] font-bold text-2xl text-[color:var(--color-accent-secondary)] tabular-nums">{streak.current}</p>
+                <p className="font-[family-name:var(--font-heading)] font-bold text-2xl text-[color:var(--color-cta-alt)] tabular-nums">{streak.current}</p>
               </div>
               <div className="rounded-xl border border-[color:var(--line)] bg-[var(--glass)] p-3 text-center">
                 <p className="text-[color:var(--muted)] text-[10px] font-semibold uppercase tracking-widest mb-0.5">Time</p>

@@ -7,10 +7,19 @@ interface DifficultySelectorProps {
   onChange: (value: 'easy' | 'medium' | 'hard') => void
 }
 
-const BADGE_COLORS: Record<string, string> = {
-  easy: 'bg-[color:var(--color-success)]/20 text-[color:var(--color-success)] border-[color:var(--color-success)]/30',
-  medium: 'bg-[color:var(--color-warning)]/20 text-[color:var(--color-warning)] border-[color:var(--color-warning)]/30',
-  hard: 'bg-[color:var(--color-error)]/20 text-[color:var(--color-error)] border-[color:var(--color-error)]/30',
+type ActiveStyle = { background: string; color: string; borderColor: string; boxShadow: string }
+type InactiveStyle = { background: string; color: string; borderColor: string }
+
+const ACTIVE_STYLES: Record<string, ActiveStyle> = {
+  easy:   { background: 'color-mix(in srgb, var(--success) 15%, transparent)', color: 'var(--success)', borderColor: 'var(--success)',  boxShadow: '0 0 0 1px var(--success)' },
+  medium: { background: 'color-mix(in srgb, var(--warning) 15%, transparent)', color: 'var(--warning)', borderColor: 'var(--warning)',  boxShadow: '0 0 0 1px var(--warning)' },
+  hard:   { background: 'color-mix(in srgb, var(--error)   15%, transparent)', color: 'var(--error)',   borderColor: 'var(--error)',    boxShadow: '0 0 0 1px var(--error)' },
+}
+
+const INACTIVE_STYLE: InactiveStyle = {
+  background: 'var(--glass)',
+  color: 'var(--ink)',
+  borderColor: 'var(--line)',
 }
 
 export function DifficultySelector({ selected, difficulties, disabled, onChange }: DifficultySelectorProps) {
@@ -26,11 +35,8 @@ export function DifficultySelector({ selected, difficulties, disabled, onChange 
             onClick={() => !disabled && onChange(diff.level as 'easy' | 'medium' | 'hard')}
             disabled={disabled}
             title={diff.description}
-            className={`px-4 py-2.5 rounded-[var(--radius-btn)] font-semibold text-sm transition-all duration-200 min-h-[44px] border flex-1 ${
-              selected === diff.level
-                ? `${BADGE_COLORS[diff.level]} shadow-lg`
-                : 'bg-[color:var(--color-surface-secondary)] text-[color:var(--color-text-primary)] border-[color:var(--color-border)] hover:border-[color:var(--color-border)]'
-            }`}
+            className="px-4 py-2.5 rounded-[var(--radius-btn)] font-semibold text-sm transition-all duration-200 min-h-[44px] border flex-1"
+            style={selected === diff.level ? ACTIVE_STYLES[diff.level] : INACTIVE_STYLE}
           >
             {diff.label}
           </button>

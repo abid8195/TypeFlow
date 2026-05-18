@@ -1,53 +1,55 @@
 @import "tailwindcss";
 
-/* ─── Tailwind 4 theme tokens ─────────────────────────────────────────────── */
+/* ─── Tailwind 4 theme tokens (reference FreeAppStore vars — no hardcodes) ── */
 @theme {
   /* Fonts */
-  --font-sans: 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-sans:    'Manrope', system-ui, -apple-system, sans-serif;
   --font-heading: 'Fraunces', Georgia, serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  --font-mono:    'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
-  /* App colour palette */
-  --color-background: #0f0f0f;
-  --color-surface: #1a1a1a;
-  --color-surface-secondary: #252525;
-  --color-text-primary: #e8e8e8;
-  --color-text-secondary: #a0a0a0;
-  --color-border: #2e2e2e;
-  --color-accent: #00d9ff;
-  --color-accent-secondary: #7c3aed;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
+  /* Tailwind colour tokens wired to FreeAppStore CSS variables */
+  --color-paper:            var(--paper);
+  --color-ink:              var(--ink);
+  --color-muted:            var(--muted);
+  --color-line:             var(--line);
+  --color-panel:            var(--panel);
+  --color-success:          var(--success);
+  --color-warning:          var(--warning);
+  --color-error:            var(--error);
 
-  /* Border radius */
+  /* App accent colours (cyan/purple palette) */
+  --color-accent:           var(--color-cta);
+  --color-accent-secondary: var(--color-cta-alt);
+
+  /* Border radius — FreeAppStore spec */
   --radius-card: 1.25rem;
-  --radius-btn: 0.75rem;
+  --radius-btn:  0.75rem;
 
-  /* Custom screen */
+  /* Responsive breakpoint */
   --breakpoint-xs: 360px;
 
   /* Animations */
   --animate-pulse-subtle: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  --animate-fade-in: fade-in 0.25s ease-out;
-  --animate-slide-up: slide-up 0.3s ease-out;
+  --animate-fade-in:      fade-in 0.25s ease-out;
+  --animate-slide-up:     slide-up 0.3s ease-out;
 
   @keyframes pulse-subtle {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+    50%       { opacity: 0.6; }
   }
   @keyframes fade-in {
     from { opacity: 0; }
-    to { opacity: 1; }
+    to   { opacity: 1; }
   }
   @keyframes slide-up {
     from { transform: translateY(12px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+    to   { transform: translateY(0);    opacity: 1; }
   }
 }
 
 /* ─── FreeAppStore required CSS variables ─────────────────────────────────── */
 :root {
+  /* Platform tokens (required by FreeAppStore compliance) */
   --paper:   #0f0f0f;
   --ink:     #e8e8e8;
   --muted:   #a0a0a0;
@@ -59,6 +61,18 @@
   --success: #10b981;
   --warning: #f59e0b;
   --error:   #ef4444;
+
+  /* App-specific accent palette (layered on top of platform tokens) */
+  --color-cta:     #00d9ff;   /* TypeFlow cyan — primary interactive colour */
+  --color-cta-alt: #7c3aed;   /* TypeFlow purple — secondary accent */
+
+  /* Reusable gradient tokens (no hardcoded hex in components) */
+  --gradient-brand: linear-gradient(90deg,  var(--color-cta) 0%, var(--color-cta-alt) 100%);
+  --gradient-cta:   linear-gradient(135deg, var(--color-cta) 0%, var(--color-cta-alt) 100%);
+  --shadow-cta:     0 4px 20px rgba(0, 217, 255, 0.25);
+
+  /* Overlay used by modals */
+  --overlay: rgba(0, 0, 0, 0.7);
 }
 
 /* ─── PWA / mobile root sizing ────────────────────────────────────────────── */
@@ -89,8 +103,8 @@ body {
 /* ─── Safe-area insets (notched devices) ──────────────────────────────────── */
 @supports (padding: max(0px)) {
   body {
-    padding-left: max(0px, env(safe-area-inset-left));
-    padding-right: max(0px, env(safe-area-inset-right));
+    padding-left:   max(0px, env(safe-area-inset-left));
+    padding-right:  max(0px, env(safe-area-inset-right));
     padding-bottom: max(0px, env(safe-area-inset-bottom));
   }
 }
@@ -124,15 +138,15 @@ button:disabled {
 /* ─── Focus ring ──────────────────────────────────────────────────────────── */
 button:focus-visible,
 input:focus-visible {
-  outline: 2px solid #00d9ff;
+  outline: 2px solid var(--color-cta);
   outline-offset: 2px;
 }
 
 /* ─── Scrollbar (modals only) ─────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #444; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* ─── Utility ─────────────────────────────────────────────────────────────── */
 .sr-only {

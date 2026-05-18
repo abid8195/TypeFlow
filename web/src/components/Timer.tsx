@@ -15,10 +15,9 @@ export function Timer({ timeRemaining, isActive }: TimerProps) {
       </p>
       <p
         className={`font-[family-name:var(--font-heading)] font-bold tabular-nums transition-colors duration-300 ${
-          isLow
-            ? 'text-[color:var(--color-error)] text-6xl sm:text-7xl animate-[pulse-subtle_1s_ease-in-out_infinite]'
-            : 'text-[color:var(--color-accent)] text-5xl sm:text-6xl'
+          isLow ? 'text-6xl sm:text-7xl animate-[pulse-subtle_1s_ease-in-out_infinite]' : 'text-5xl sm:text-6xl'
         }`}
+        style={{ color: isLow ? 'var(--error)' : 'var(--color-cta)' }}
       >
         {formatTime(timeRemaining)}
       </p>

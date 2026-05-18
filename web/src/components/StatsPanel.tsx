@@ -11,19 +11,19 @@ export function StatsPanel({ wpm, accuracy, errors, isTestActive }: StatsPanelPr
       <StatCard
         label="WPM"
         value={wpm.toString()}
-        color={isTestActive ? 'accent' : 'muted'}
+        cssColor={isTestActive ? 'var(--color-cta)' : 'var(--muted)'}
         active={isTestActive}
       />
       <StatCard
         label="Accuracy"
         value={`${accuracy.toFixed(1)}%`}
-        color={accuracy < 80 && isTestActive ? 'error' : isTestActive ? 'accent' : 'muted'}
+        cssColor={accuracy < 80 && isTestActive ? 'var(--error)' : isTestActive ? 'var(--color-cta)' : 'var(--muted)'}
         active={isTestActive}
       />
       <StatCard
         label="Errors"
         value={errors.toString()}
-        color={errors > 0 ? 'error' : 'success'}
+        cssColor={errors > 0 ? 'var(--error)' : 'var(--success)'}
         active={isTestActive}
       />
     </div>
@@ -33,33 +33,26 @@ export function StatsPanel({ wpm, accuracy, errors, isTestActive }: StatsPanelPr
 function StatCard({
   label,
   value,
-  color,
+  cssColor,
   active,
 }: {
   label: string
   value: string
-  color: 'accent' | 'muted' | 'error' | 'success'
+  cssColor: string
   active: boolean
 }) {
-  const colorClass = {
-    accent: 'text-[color:var(--color-accent)]',
-    muted: 'text-[color:var(--muted)]',
-    error: 'text-[color:var(--color-error)]',
-    success: 'text-[color:var(--color-success)]',
-  }[color]
-
   return (
     <div
-      className={`rounded-[var(--radius-card)] p-3 sm:p-4 text-center border transition-all duration-300 bg-[var(--glass)] backdrop-blur-sm ${
-        active
-          ? 'border-[color:var(--color-accent)]/20 shadow-sm shadow-[color:var(--color-accent)]/5'
-          : 'border-[color:var(--line)]'
-      }`}
+      className="rounded-[var(--radius-card)] p-3 sm:p-4 text-center border transition-all duration-300 bg-[var(--glass)] backdrop-blur-sm"
+      style={{ borderColor: active ? 'color-mix(in srgb, var(--color-cta) 20%, transparent)' : 'var(--line)' }}
     >
       <p className="text-[color:var(--muted)] text-[10px] font-semibold uppercase tracking-widest mb-1">
         {label}
       </p>
-      <p className={`font-[family-name:var(--font-heading)] font-bold text-2xl sm:text-3xl tabular-nums ${colorClass}`}>
+      <p
+        className="font-[family-name:var(--font-heading)] font-bold text-2xl sm:text-3xl tabular-nums"
+        style={{ color: cssColor }}
+      >
         {value}
       </p>
     </div>

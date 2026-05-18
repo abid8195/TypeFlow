@@ -11,6 +11,14 @@ interface TypingAreaProps {
 
 type CharStatus = 'correct' | 'incorrect' | 'pending' | 'extra'
 
+/** Inline style maps — all colours reference FreeAppStore CSS variables */
+const CHAR_STYLES: Record<CharStatus, React.CSSProperties> = {
+  correct:   { color: 'var(--success)' },
+  incorrect: { color: 'var(--error)',   background: 'color-mix(in srgb, var(--error) 12%, transparent)', borderRadius: '3px' },
+  pending:   { color: 'var(--ink)' },
+  extra:     { color: 'color-mix(in srgb, var(--error) 60%, transparent)' },
+}
+
 export function TypingArea({
   testWords,
   userInput,
@@ -25,11 +33,9 @@ export function TypingArea({
   const charStatus = useMemo<CharStatus[]>(() => {
     const chars: CharStatus[] = []
     for (let i = 0; i < currentWord.length; i++) {
-      if (i < userInput.length) {
-        chars.push(userInput[i] === currentWord[i] ? 'correct' : 'incorrect')
-      } else {
-        chars.push('pending')
-      }
+      chars.push(i < userInput.length
+        ? (userInput[i] === currentWord[i] ? 'correct' : 'incorrect')
+        : 'pending')
     }
     for (let i = currentWord.length; i < userInput.length; i++) {
       chars.push('extra')
@@ -39,13 +45,6 @@ export function TypingArea({
 
   if (testWords.length === 0) return null
 
-  const charClass: Record<CharStatus, string> = {
-    correct: 'text-[color:var(--color-success)]',
-    incorrect: 'bg-[color:var(--color-error)]/15 text-[color:var(--color-error)] rounded',
-    pending: 'text-[color:var(--ink)]',
-    extra: 'text-[color:var(--color-error)]/60',
-  }
-
   return (
     <div className="w-full max-w-3xl flex flex-col gap-5">
       {/* Typing card */}
@@ -54,22 +53,25 @@ export function TypingArea({
         <div className="min-h-[3.5rem] flex items-center justify-center mb-5">
           <div className="font-mono text-3xl sm:text-4xl md:text-5xl tracking-tight leading-snug flex flex-wrap gap-0.5 justify-center">
             {Array.from(currentWord).map((char, i) => (
-              <span key={i} className={`transition-colors duration-75 ${charClass[charStatus[i] ?? 'pending']}`}>
+              <span key={i} style={CHAR_STYLES[charStatus[i] ?? 'pending']} className="transition-colors duration-75">
                 {char}
               </span>
             ))}
-            {/* Extra typed chars */}
+            {/* Extra typed characters beyond word length */}
             {userInput.slice(currentWord.length).split('').map((char, i) => (
-              <span key={`ex-${i}`} className={charClass.extra}>{char}</span>
+              <span key={`ex-${i}`} style={CHAR_STYLES.extra}>{char}</span>
             ))}
-            {/* Cursor */}
+            {/* Blinking cursor */}
             {isTestActive && (
-              <span className="inline-block w-0.5 h-10 bg-[color:var(--color-accent)] rounded-full ml-1 animate-[pulse-subtle_1s_ease-in-out_infinite]" />
+              <span
+                className="inline-block w-0.5 h-10 rounded-full ml-1 animate-[pulse-subtle_1s_ease-in-out_infinite]"
+                style={{ background: 'var(--color-cta)' }}
+              />
             )}
           </div>
         </div>
 
-        {/* Upcoming words */}
+        {/* Upcoming words preview */}
         <p className="text-[color:var(--muted)] font-mono text-sm sm:text-base text-center leading-relaxed break-words">
           {upcomingWords.join(' ')}
         </p>
@@ -95,14 +97,21 @@ export function TypingArea({
         <button
           onClick={onSkipWord}
           disabled={!isTestActive}
-          className="px-4 py-2 rounded-[var(--radius-btn)] text-sm font-medium border border-[color:var(--line)] text-[color:var(--muted)] hover:border-[color:var(--color-accent)]/40 hover:text-[color:var(--ink)] transition-all duration-200 min-h-[44px]"
+          className="px-4 py-2 rounded-[var(--radius-btn)] text-sm font-medium border transition-all duration-200 min-h-[44px]"
+          style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
         >
           Skip word
         </button>
         <p className="text-[color:var(--muted)] text-xs hidden sm:block">
-          <kbd className="bg-[color:var(--color-surface)] px-1.5 py-0.5 rounded text-[10px] font-mono border border-[color:var(--line)]">Tab</kbd>
+          <kbd
+            className="px-1.5 py-0.5 rounded text-[10px] font-mono border"
+            style={{ background: 'var(--panel)', borderColor: 'var(--line)' }}
+          >Tab</kbd>
           {' '}skip &nbsp;·&nbsp;
-          <kbd className="bg-[color:var(--color-surface)] px-1.5 py-0.5 rounded text-[10px] font-mono border border-[color:var(--line)]">Space</kbd>
+          <kbd
+            className="px-1.5 py-0.5 rounded text-[10px] font-mono border"
+            style={{ background: 'var(--panel)', borderColor: 'var(--line)' }}
+          >Space</kbd>
           {' '}next
         </p>
       </div>
