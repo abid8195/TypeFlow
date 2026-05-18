@@ -47,22 +47,11 @@
   }
 }
 
-/* ─── FreeAppStore required CSS variables ─────────────────────────────────── */
+/* ─── App-specific design tokens (platform tokens are NOT redefined here) ──── */
+/*     --paper, --ink, --muted, --line, --panel, --glass, --dock,               */
+/*     --accent, --success, --warning, --error  are owned by the FAS template.  */
 :root {
-  /* Platform tokens (required by FreeAppStore compliance) */
-  --paper:   #0f0f0f;
-  --ink:     #e8e8e8;
-  --muted:   #a0a0a0;
-  --line:    #2e2e2e;
-  --panel:   #1a1a1a;
-  --glass:   rgba(26, 26, 26, 0.6);
-  --dock:    rgba(15, 15, 15, 0.85);
-  --accent:  #2563eb;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error:   #ef4444;
-
-  /* App-specific accent palette (layered on top of platform tokens) */
+  /* App-specific accent palette */
   --color-cta:     #00d9ff;   /* TypeFlow cyan — primary interactive colour */
   --color-cta-alt: #7c3aed;   /* TypeFlow purple — secondary accent */
 
