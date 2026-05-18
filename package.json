@@ -1,0 +1,19 @@
+{
+  "name": "typeflow-workspace",
+  "version": "1.0.0",
+  "description": "TypeFlow - Modern typing speed test PWA",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter typeflow dev",
+    "build": "pnpm --filter typeflow build",
+    "preview": "pnpm --filter typeflow preview",
+    "type-check": "pnpm --filter typeflow type-check"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "keywords": ["typing", "speed-test", "pwa", "react", "typescript", "vite"],
+  "author": "TypeFlow",
+  "license": "MIT"
+}
