@@ -17,15 +17,15 @@ export function Navbar({ onSettingsClick }: NavbarProps) {
           style={{ background: 'var(--gradient-cta)', boxShadow: 'var(--shadow-cta)' }}
         >
           <span
-            className="font-[family-name:var(--font-heading)] font-bold text-base leading-none"
-            style={{ color: 'var(--paper)' }}
+            className="font-bold text-base leading-none"
+            style={{ fontFamily: "'Fraunces', Georgia, serif", color: 'var(--paper)' }}
           >
             T
           </span>
         </div>
         <span
-          className="font-[family-name:var(--font-heading)] font-bold text-lg"
-          style={{ background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
+          className="font-bold text-lg"
+          style={{ fontFamily: "'Fraunces', Georgia, serif", background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
         >
           TypeFlow
         </span>

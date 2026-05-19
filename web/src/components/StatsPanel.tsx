@@ -40,8 +40,8 @@ function CompactStat({ label, value, color }: { label: string; value: number | s
         {label}
       </p>
       <p
-        className="font-[family-name:var(--font-heading)] font-bold text-xl tabular-nums leading-none transition-colors duration-300"
-        style={{ color }}
+        className="font-bold text-xl tabular-nums leading-none transition-colors duration-300"
+        style={{ fontFamily: "'Fraunces', Georgia, serif", color }}
       >
         {value}
       </p>
@@ -62,8 +62,8 @@ function StatCard({ label, value, color, active }: { label: string; value: numbe
         {label}
       </p>
       <p
-        className="font-[family-name:var(--font-heading)] font-bold text-3xl tabular-nums transition-colors duration-300"
-        style={{ color }}
+        className="font-bold text-3xl tabular-nums transition-colors duration-300"
+        style={{ fontFamily: "'Fraunces', Georgia, serif", color }}
       >
         {value}
       </p>

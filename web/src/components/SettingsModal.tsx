@@ -23,7 +23,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="w-10 h-1 rounded-full" style={{ background: 'var(--line)' }} />
           </div>
 
-          <h2 className="font-[family-name:var(--font-heading)] font-bold text-2xl text-center mb-6" style={{ color: 'var(--ink)' }}>
+          <h2 className="font-bold text-2xl text-center mb-6" style={{ fontFamily: "'Fraunces', Georgia, serif", color: 'var(--ink)' }}>
             About TypeFlow
           </h2>
 

@@ -283,8 +283,8 @@ export default function App() {
             <div className="flex-1 flex flex-col items-center lg:items-start gap-6 pt-0 lg:pt-2">
               <div className="text-center lg:text-left">
                 <h1
-                  className="font-[family-name:var(--font-heading)] font-bold text-5xl sm:text-6xl lg:text-7xl leading-none mb-3"
-                  style={{ background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
+                  className="font-bold text-5xl sm:text-6xl lg:text-7xl leading-none mb-3"
+                  style={{ fontFamily: "'Fraunces', Georgia, serif", background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
                 >
                   TypeFlow
                 </h1>
@@ -342,8 +342,8 @@ export default function App() {
               />
               <button
                 onClick={startTest}
-                className="w-full py-4 rounded-[var(--radius-btn)] font-[family-name:var(--font-heading)] font-bold text-xl tracking-tight hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] transition-all duration-150"
-                style={{ background: 'var(--gradient-cta)', color: 'var(--paper)', boxShadow: 'var(--shadow-cta)' }}
+                className="w-full py-4 rounded-[var(--radius-btn)] font-bold text-xl tracking-tight hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] transition-all duration-150"
+                style={{ fontFamily: "'Fraunces', Georgia, serif", background: 'var(--gradient-cta)', color: 'var(--paper)', boxShadow: 'var(--shadow-cta)' }}
               >
                 Start Test
               </button>
@@ -379,7 +379,7 @@ function StatPill({ label, value, color }: { label: string; value: number | stri
   return (
     <div className="text-center">
       <p className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: 'var(--muted)' }}>{label}</p>
-      <p className="font-[family-name:var(--font-heading)] font-bold text-2xl tabular-nums leading-none" style={{ color }}>
+      <p className="font-bold text-2xl tabular-nums leading-none" style={{ fontFamily: "'Fraunces', Georgia, serif", color }}>
         {value}
       </p>
     </div>

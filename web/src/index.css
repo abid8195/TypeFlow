@@ -2,11 +2,6 @@
 
 /* ─── Tailwind 4 theme tokens ──────────────────────────────────────────────── */
 @theme {
-  /* Fonts */
-  --font-sans:    'Manrope', system-ui, -apple-system, sans-serif;
-  --font-heading: 'Fraunces', Georgia, serif;
-  --font-mono:    'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-
   /* Tailwind colour tokens wired to FreeAppStore CSS variables */
   --color-paper:            var(--paper);
   --color-ink:              var(--ink);
@@ -85,7 +80,7 @@ html {
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* ─── Safe-area insets ────────────────────────────────────────────────────── */
@@ -99,7 +94,7 @@ body {
 
 /* ─── Typography ──────────────────────────────────────────────────────────── */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
+  font-family: 'Fraunces', Georgia, serif;
   margin: 0;
 }
 

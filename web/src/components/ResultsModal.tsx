@@ -45,8 +45,8 @@ export function ResultsModal({ isOpen, results, difficulty, onClose, onRetry }: 
               {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} mode
             </p>
             <p
-              className="font-[family-name:var(--font-heading)] font-bold text-3xl mb-1"
-              style={{ color: perf.color }}
+              className="font-bold text-3xl mb-1"
+              style={{ fontFamily: "'Fraunces', Georgia, serif", color: perf.color }}
             >
               {perf.label}
             </p>
@@ -61,8 +61,8 @@ export function ResultsModal({ isOpen, results, difficulty, onClose, onRetry }: 
               Words per minute
             </p>
             <p
-              className="font-[family-name:var(--font-heading)] font-bold tabular-nums leading-none"
-              style={{ fontSize: '4.5rem', color: 'var(--color-cta)' }}
+              className="font-bold tabular-nums leading-none"
+              style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: '4.5rem', color: 'var(--color-cta)' }}
             >
               {wpm}
             </p>
@@ -133,7 +133,7 @@ function ResultStat({ label, value, color }: { label: string; value: string; col
       <p className="text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--muted)' }}>
         {label}
       </p>
-      <p className="font-[family-name:var(--font-heading)] font-bold text-2xl tabular-nums" style={{ color }}>
+      <p className="font-bold text-2xl tabular-nums" style={{ fontFamily: "'Fraunces', Georgia, serif", color }}>
         {value}
       </p>
     </div>

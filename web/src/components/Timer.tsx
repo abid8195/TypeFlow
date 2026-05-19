@@ -17,10 +17,11 @@ export function Timer({ timeRemaining, isActive }: TimerProps) {
         {isActive ? 'Time left' : 'Duration'}
       </p>
       <p
-        className={`font-[family-name:var(--font-heading)] font-bold tabular-nums leading-none transition-colors duration-300 ${
+        className={`font-bold tabular-nums leading-none transition-colors duration-300 ${
           isLow ? 'animate-[pulse-subtle_0.8s_ease-in-out_infinite]' : ''
         }`}
         style={{
+          fontFamily: "'Fraunces', Georgia, serif",
           fontSize: 'clamp(2.5rem, 6vw, 4rem)',
           color: isLow ? 'var(--error)' : 'var(--color-cta)',
         }}
