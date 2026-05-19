@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useLayoutEffect, useRef, useMemo } from 'react'
 
 interface TypingAreaProps {
   testWords: string[]
   userInput: string
   currentWordIndex: number
+  wordResults: boolean[]        // true = completed correctly
   isTestActive: boolean
   onInputChange: (value: string) => void
   onSkipWord: () => void
@@ -11,73 +12,165 @@ interface TypingAreaProps {
 
 type CharStatus = 'correct' | 'incorrect' | 'pending' | 'extra'
 
-/** Inline style maps — all colours reference FreeAppStore CSS variables */
-const CHAR_STYLES: Record<CharStatus, React.CSSProperties> = {
-  correct:   { color: 'var(--success)' },
-  incorrect: { color: 'var(--error)',   background: 'color-mix(in srgb, var(--error) 12%, transparent)', borderRadius: '3px' },
-  pending:   { color: 'var(--ink)' },
-  extra:     { color: 'color-mix(in srgb, var(--error) 60%, transparent)' },
+const CHAR_COLOR: Record<CharStatus, string> = {
+  correct:   'var(--success)',
+  incorrect: 'var(--error)',
+  pending:   'var(--muted)',
+  extra:     'var(--error)',
 }
+
+const LINE_HEIGHT_PX = 44   // px — matches font+padding below; must stay in sync with CSS
+const VISIBLE_LINES  = 3    // rows visible in the clipping container
 
 export function TypingArea({
   testWords,
   userInput,
   currentWordIndex,
+  wordResults,
   isTestActive,
   onInputChange,
   onSkipWord,
 }: TypingAreaProps) {
-  const currentWord = testWords[currentWordIndex] ?? ''
-  const upcomingWords = testWords.slice(currentWordIndex + 1, currentWordIndex + 10)
+  const innerRef = useRef<HTMLDivElement>(null)
+  const wordRefs = useRef<(HTMLSpanElement | null)[]>([])
 
-  const charStatus = useMemo<CharStatus[]>(() => {
-    const chars: CharStatus[] = []
+  // Scroll the inner div so current word is always on the first visible row
+  useLayoutEffect(() => {
+    const el = wordRefs.current[currentWordIndex]
+    if (!el || !innerRef.current) return
+    const translateY = Math.max(0, el.offsetTop - LINE_HEIGHT_PX)
+    innerRef.current.style.transform = `translateY(-${translateY}px)`
+  }, [currentWordIndex])
+
+  const charStatuses = useMemo<CharStatus[]>(() => {
+    const currentWord = testWords[currentWordIndex] ?? ''
+    const result: CharStatus[] = []
     for (let i = 0; i < currentWord.length; i++) {
-      chars.push(i < userInput.length
-        ? (userInput[i] === currentWord[i] ? 'correct' : 'incorrect')
-        : 'pending')
+      result.push(
+        i < userInput.length
+          ? (userInput[i] === currentWord[i] ? 'correct' : 'incorrect')
+          : 'pending'
+      )
     }
     for (let i = currentWord.length; i < userInput.length; i++) {
-      chars.push('extra')
+      result.push('extra')
     }
-    return chars
-  }, [currentWord, userInput])
+    return result
+  }, [testWords, currentWordIndex, userInput])
 
   if (testWords.length === 0) return null
 
   return (
-    <div className="w-full max-w-3xl flex flex-col gap-5">
-      {/* Typing card */}
-      <div className="rounded-[var(--radius-card)] border border-[color:var(--line)] bg-[var(--glass)] backdrop-blur-md p-6 sm:p-8 shadow-2xl">
-        {/* Current word */}
-        <div className="min-h-[3.5rem] flex items-center justify-center mb-5">
-          <div className="font-mono text-3xl sm:text-4xl md:text-5xl tracking-tight leading-snug flex flex-wrap gap-0.5 justify-center">
-            {Array.from(currentWord).map((char, i) => (
-              <span key={i} style={CHAR_STYLES[charStatus[i] ?? 'pending']} className="transition-colors duration-75">
-                {char}
-              </span>
-            ))}
-            {/* Extra typed characters beyond word length */}
-            {userInput.slice(currentWord.length).split('').map((char, i) => (
-              <span key={`ex-${i}`} style={CHAR_STYLES.extra}>{char}</span>
-            ))}
-            {/* Blinking cursor */}
-            {isTestActive && (
+    <div className="w-full flex flex-col gap-4">
+
+      {/* ── Clipping window ── */}
+      <div
+        className="w-full relative select-none"
+        style={{
+          height: `${LINE_HEIGHT_PX * VISIBLE_LINES}px`,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Top fade — hides partially-scrolled words gracefully */}
+        <div
+          className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
+          style={{
+            height: '1.5rem',
+            background: 'linear-gradient(to bottom, var(--paper), transparent)',
+          }}
+        />
+
+        {/* Inner scrolling word strip */}
+        <div
+          ref={innerRef}
+          className="words-inner absolute inset-x-0 top-0"
+          style={{ lineHeight: `${LINE_HEIGHT_PX}px` }}
+        >
+          {testWords.map((word, wi) => {
+            const isCurrentWord = wi === currentWordIndex
+            const isCompleted   = wi < currentWordIndex
+            const isCorrect     = wordResults[wi]   // only meaningful when isCompleted
+
+            return (
               <span
-                className="inline-block w-0.5 h-10 rounded-full ml-1 animate-[pulse-subtle_1s_ease-in-out_infinite]"
-                style={{ background: 'var(--color-cta)' }}
-              />
-            )}
-          </div>
+                key={wi}
+                ref={(el) => { wordRefs.current[wi] = el }}
+                className="inline-block mr-3"
+                style={{
+                  fontSize: '1.375rem',      // 22px — generous but not huge
+                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.01em',
+                }}
+              >
+                {isCurrentWord ? (
+                  /* ── Active word — character-level coloring + cursor ── */
+                  <span className="relative">
+                    {/* Characters already typed */}
+                    {Array.from(testWords[currentWordIndex]).map((char, ci) => (
+                      <span
+                        key={ci}
+                        style={{
+                          color: CHAR_COLOR[charStatuses[ci] ?? 'pending'],
+                          transition: 'color 60ms ease',
+                        }}
+                      >
+                        {char}
+                      </span>
+                    ))}
+                    {/* Extra chars typed beyond word length */}
+                    {userInput.slice(testWords[currentWordIndex].length).split('').map((char, ci) => (
+                      <span key={`ex-${ci}`} style={{ color: CHAR_COLOR.extra, opacity: 0.65 }}>
+                        {char}
+                      </span>
+                    ))}
+                    {/* Blinking cursor — inserted after last typed position */}
+                    <span
+                      className="animate-[cursor-blink_1.1s_step-end_infinite]"
+                      style={{
+                        display: 'inline-block',
+                        width: '2px',
+                        height: '1.3em',
+                        verticalAlign: 'text-bottom',
+                        background: 'var(--color-cta)',
+                        borderRadius: '1px',
+                        marginLeft: userInput.length > 0 ? '1px' : '-1px',
+                        marginRight: '1px',
+                        boxShadow: '0 0 6px var(--color-cta)',
+                      }}
+                    />
+                  </span>
+                ) : isCompleted ? (
+                  /* ── Completed word — solid color based on correctness ── */
+                  <span
+                    style={{
+                      color: isCorrect ? 'var(--success)' : 'var(--error)',
+                      opacity: 0.55,
+                    }}
+                  >
+                    {word}
+                  </span>
+                ) : (
+                  /* ── Upcoming word — muted ── */
+                  <span style={{ color: 'var(--muted)' }}>
+                    {word}
+                  </span>
+                )}
+              </span>
+            )
+          })}
         </div>
 
-        {/* Upcoming words preview */}
-        <p className="text-[color:var(--muted)] font-mono text-sm sm:text-base text-center leading-relaxed break-words">
-          {upcomingWords.join(' ')}
-        </p>
+        {/* Bottom fade */}
+        <div
+          className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
+          style={{
+            height: '2.5rem',
+            background: 'linear-gradient(to top, var(--paper), transparent)',
+          }}
+        />
       </div>
 
-      {/* Hidden real input */}
+      {/* ── Input capture (sr-only) ── */}
       <input
         type="text"
         value={userInput}
@@ -88,32 +181,27 @@ export function TypingArea({
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
-        aria-label="Typing input — start typing to begin"
+        aria-label="Typing input — type the words shown above"
         id="typing-input"
       />
 
-      {/* Hints */}
-      <div className="flex items-center justify-center gap-4">
+      {/* ── Skip button ── */}
+      <div className="flex justify-center">
         <button
           onClick={onSkipWord}
           disabled={!isTestActive}
-          className="px-4 py-2 rounded-[var(--radius-btn)] text-sm font-medium border transition-all duration-200 min-h-[44px]"
-          style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+          className="px-4 py-2 rounded-[var(--radius-btn)] text-xs font-semibold uppercase tracking-widest transition-all duration-150 hover:scale-[1.03] active:scale-[0.97]"
+          style={{
+            border: '1px solid var(--line)',
+            color: 'var(--muted)',
+            background: 'transparent',
+            minHeight: '36px',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--glass)' }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
         >
           Skip word
         </button>
-        <p className="text-[color:var(--muted)] text-xs hidden sm:block">
-          <kbd
-            className="px-1.5 py-0.5 rounded text-[10px] font-mono border"
-            style={{ background: 'var(--panel)', borderColor: 'var(--line)' }}
-          >Tab</kbd>
-          {' '}skip &nbsp;·&nbsp;
-          <kbd
-            className="px-1.5 py-0.5 rounded text-[10px] font-mono border"
-            style={{ background: 'var(--panel)', borderColor: 'var(--line)' }}
-          >Space</kbd>
-          {' '}next
-        </p>
       </div>
     </div>
   )

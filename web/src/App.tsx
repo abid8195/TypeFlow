@@ -23,6 +23,7 @@ interface TestState {
   errors: number
   correctChars: number
   totalChars: number
+  wordResults: boolean[]   // true = word was typed correctly
 }
 
 interface TestResults {
@@ -32,6 +33,18 @@ interface TestResults {
   correctChars: number
   totalChars: number
   duration: number
+}
+
+const INITIAL_STATE: Omit<TestState, 'isActive' | 'testWords'> = {
+  userInput: '',
+  currentWordIndex: 0,
+  startTime: null,
+  wpm: 0,
+  accuracy: 100,
+  errors: 0,
+  correctChars: 0,
+  totalChars: 0,
+  wordResults: [],
 }
 
 export default function App() {
@@ -48,14 +61,7 @@ export default function App() {
   const [testState, setTestState] = useState<TestState>({
     isActive: false,
     testWords: [],
-    userInput: '',
-    currentWordIndex: 0,
-    startTime: null,
-    wpm: 0,
-    accuracy: 100,
-    errors: 0,
-    correctChars: 0,
-    totalChars: 0,
+    ...INITIAL_STATE,
   })
 
   const inputRef = useRef<HTMLInputElement>(null)
@@ -96,8 +102,10 @@ export default function App() {
         const mins = Math.max((Date.now() - prev.startTime) / 60000, 0.016)
         let correctWords = 0, correctChars = 0
         for (let i = 0; i < prev.currentWordIndex && i < prev.testWords.length; i++) {
-          correctWords++
-          correctChars += prev.testWords[i].length
+          if (prev.wordResults[i]) {
+            correctWords++
+            correctChars += prev.testWords[i].length
+          }
         }
         return {
           ...prev,
@@ -113,18 +121,11 @@ export default function App() {
   const startTest = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current)
     if (statsRef.current) clearInterval(statsRef.current)
-    const words = generateWords(difficulties[difficulty].wordPool, 120)
+    const words = generateWords(difficulties[difficulty].wordPool, 150)
     setTestState({
       isActive: true,
       testWords: words,
-      userInput: '',
-      currentWordIndex: 0,
-      startTime: Date.now(),
-      wpm: 0,
-      accuracy: 100,
-      errors: 0,
-      correctChars: 0,
-      totalChars: 0,
+      ...INITIAL_STATE,
     })
     setTimeRemaining(testDuration)
     setShowResults(false)
@@ -137,13 +138,15 @@ export default function App() {
       const secs = (Date.now() - prev.startTime) / 1000
       const mins = Math.max(secs / 60, 0.016)
       let correctWords = 0, correctChars = 0
-      for (let i = 0; i <= prev.currentWordIndex && i < prev.testWords.length; i++) {
-        correctWords++
-        correctChars += prev.testWords[i].length
+      for (let i = 0; i < prev.currentWordIndex && i < prev.testWords.length; i++) {
+        if (prev.wordResults[i]) {
+          correctWords++
+          correctChars += prev.testWords[i].length
+        }
       }
       const results: TestResults = {
         wpm: Math.round(correctWords / mins),
-        accuracy: calculateAccuracy(correctChars, correctChars),
+        accuracy: calculateAccuracy(correctChars, correctChars + prev.errors),
         errors: prev.errors,
         correctChars,
         totalChars: prev.totalChars,
@@ -164,8 +167,14 @@ export default function App() {
       if (value.endsWith(' ') && prev.currentWordIndex < prev.testWords.length - 1) {
         const typed = value.trim()
         const expected = prev.testWords[prev.currentWordIndex]
-        const newErrors = prev.errors + (typed !== expected ? 1 : 0)
-        return { ...prev, userInput: '', currentWordIndex: prev.currentWordIndex + 1, errors: newErrors }
+        const isCorrect = typed === expected
+        return {
+          ...prev,
+          userInput: '',
+          currentWordIndex: prev.currentWordIndex + 1,
+          errors: prev.errors + (isCorrect ? 0 : 1),
+          wordResults: [...prev.wordResults, isCorrect],
+        }
       }
       return { ...prev, userInput: value }
     })
@@ -174,7 +183,13 @@ export default function App() {
   const skipWord = useCallback(() => {
     setTestState((prev) => {
       if (prev.currentWordIndex >= prev.testWords.length - 1) return prev
-      return { ...prev, userInput: '', currentWordIndex: prev.currentWordIndex + 1, errors: prev.errors + 1 }
+      return {
+        ...prev,
+        userInput: '',
+        currentWordIndex: prev.currentWordIndex + 1,
+        errors: prev.errors + 1,
+        wordResults: [...prev.wordResults, false],
+      }
     })
   }, [])
 
@@ -182,35 +197,36 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!testState.isActive) return
-      if (e.key === 'Tab') { e.preventDefault(); skipWord() }
+      if (e.key === 'Tab')    { e.preventDefault(); skipWord() }
       if (e.key === 'Escape') { e.preventDefault(); endTest() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [testState.isActive, skipWord, endTest])
 
-  // Click anywhere on main area to focus input
-  const focusInput = () => { if (testState.isActive) inputRef.current?.focus() }
+  const focusInput = useCallback(() => {
+    if (testState.isActive) inputRef.current?.focus()
+  }, [testState.isActive])
 
   if (isLoading) {
     return (
-      <div className="h-[100svh] w-screen flex items-center justify-center bg-[color:var(--paper)]">
+      <div className="h-[100svh] w-screen flex items-center justify-center" style={{ background: 'var(--paper)' }}>
         <div className="flex flex-col items-center gap-3">
           <div
-            className="w-10 h-10 rounded-xl animate-[pulse-subtle_1s_ease-in-out_infinite]"
+            className="w-10 h-10 rounded-2xl animate-[pulse-subtle_1s_ease-in-out_infinite]"
             style={{ background: 'var(--gradient-cta)' }}
           />
-          <p className="text-[color:var(--muted)] text-sm">Loading…</p>
+          <p style={{ color: 'var(--muted)' }} className="text-sm font-medium">Loading…</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-[100svh] w-screen flex flex-col bg-[color:var(--paper)] text-[color:var(--ink)] overflow-hidden">
+    <div className="h-[100svh] w-screen flex flex-col overflow-hidden" style={{ background: 'var(--paper)', color: 'var(--ink)' }}>
       <Navbar bestWPM={bestWPM} streak={streak.current} onSettingsClick={() => setShowSettings(true)} />
 
-      {/* Hidden input — always mounted so typing starts immediately */}
+      {/* Hidden capture input — focused on test start */}
       <input
         ref={inputRef}
         type="text"
@@ -225,84 +241,117 @@ export default function App() {
         aria-label="Typing input"
       />
 
-      <main
-        className="flex-1 overflow-hidden flex flex-col items-center justify-center px-4 sm:px-6 py-3"
-        onClick={focusInput}
-      >
+      <main className="flex-1 overflow-hidden flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-4" onClick={focusInput}>
+
         {testState.isActive ? (
           /* ── Active test ── */
-          <div className="w-full max-w-3xl flex flex-col items-center gap-5 h-full justify-center">
-            <Timer timeRemaining={timeRemaining} isActive />
+          <div className="w-full max-w-3xl flex flex-col items-center gap-6">
+            {/* Timer row */}
+            <div className="w-full flex items-center justify-between">
+              <Timer timeRemaining={timeRemaining} isActive />
+              <StatsPanel
+                wpm={testState.wpm}
+                accuracy={testState.accuracy}
+                errors={testState.errors}
+                isTestActive
+                compact
+              />
+            </div>
+
             <TypingArea
               testWords={testState.testWords}
               userInput={testState.userInput}
               currentWordIndex={testState.currentWordIndex}
+              wordResults={testState.wordResults}
               isTestActive
               onInputChange={handleInput}
               onSkipWord={skipWord}
             />
-            <StatsPanel
-              wpm={testState.wpm}
-              accuracy={testState.accuracy}
-              errors={testState.errors}
-              isTestActive
-            />
+
+            {/* Hints row */}
+            <div className="flex items-center gap-6 select-none">
+              <Kbd label="Tab" desc="skip word" />
+              <Kbd label="Space" desc="next word" />
+              <Kbd label="Esc" desc="end test" />
+            </div>
           </div>
         ) : (
           /* ── Pre-test lobby ── */
-          <div className="w-full max-w-sm flex flex-col items-center gap-3">
-            {/* Hero — compact */}
-            <div className="text-center">
-              <h1
-                className="font-[family-name:var(--font-heading)] font-bold text-4xl sm:text-5xl"
-                style={{ background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
-              >
-                TypeFlow
-              </h1>
-              <p className="text-[color:var(--muted)] text-xs sm:text-sm mt-0.5">
-                Test your speed · Build your streak
-              </p>
+          <div className="w-full max-w-4xl flex flex-col lg:flex-row items-center lg:items-start gap-8 lg:gap-16">
+
+            {/* Left — hero */}
+            <div className="flex-1 flex flex-col items-center lg:items-start gap-6 pt-0 lg:pt-2">
+              <div className="text-center lg:text-left">
+                <h1
+                  className="font-[family-name:var(--font-heading)] font-bold text-5xl sm:text-6xl lg:text-7xl leading-none mb-3"
+                  style={{ background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
+                >
+                  TypeFlow
+                </h1>
+                <p className="text-base sm:text-lg" style={{ color: 'var(--muted)' }}>
+                  Measure your speed. Build your streak.
+                </p>
+              </div>
+
+              {/* Stats row */}
+              <div className="flex items-center gap-3 sm:gap-4">
+                <StatPill label="Best WPM" value={bestWPM} color="var(--color-cta)" />
+                <div style={{ width: 1, height: 36, background: 'var(--line)' }} />
+                <StatPill label="Streak" value={streak.current} color="var(--color-cta-alt)" />
+                <div style={{ width: 1, height: 36, background: 'var(--line)' }} />
+                <StatPill label="Duration" value={testDuration >= 60 ? `${testDuration / 60}m` : `${testDuration}s`} color="var(--ink)" />
+              </div>
+
+              {/* Keyboard hints — desktop only */}
+              <div className="hidden lg:flex flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--muted)' }}>Shortcuts</p>
+                <div className="flex flex-col gap-1.5">
+                  {[
+                    ['Space', 'advance to next word'],
+                    ['Tab', 'skip current word'],
+                    ['Esc', 'end test early'],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <kbd
+                        className="px-2 py-0.5 rounded text-[11px] font-mono font-medium"
+                        style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+                      >
+                        {key}
+                      </kbd>
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            {/* Config card — Duration + Difficulty + Start all-in-one */}
-            <div className="w-full rounded-[var(--radius-card)] border border-[color:var(--line)] bg-[var(--glass)] backdrop-blur-md p-4 sm:p-5 flex flex-col gap-4">
+            {/* Right — config card */}
+            <div
+              className="w-full lg:w-[22rem] shrink-0 rounded-[var(--radius-card)] p-6 sm:p-7 flex flex-col gap-5"
+              style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}
+            >
               <DurationSelector
                 selected={testDuration}
                 onChange={(v) => { setTestDuration(v); setTimeRemaining(v) }}
               />
+              <div style={{ height: 1, background: 'var(--line)' }} />
               <DifficultySelector
                 selected={difficulty}
                 difficulties={difficulties}
                 onChange={setDifficulty}
               />
-
-              {/* Start button — inside the card */}
               <button
                 onClick={startTest}
-                style={{ background: 'var(--gradient-cta)', color: 'var(--paper)' }}
-                className="w-full py-3.5 rounded-[var(--radius-btn)] font-[family-name:var(--font-heading)] font-bold text-lg shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-h-[48px]"
+                className="w-full py-4 rounded-[var(--radius-btn)] font-[family-name:var(--font-heading)] font-bold text-xl tracking-tight hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] transition-all duration-150"
+                style={{ background: 'var(--gradient-cta)', color: 'var(--paper)', boxShadow: 'var(--shadow-cta)' }}
               >
                 Start Test
               </button>
+              <p className="text-center text-xs" style={{ color: 'var(--muted)' }}>
+                Press any key to start
+              </p>
             </div>
 
-            {/* Personal bests */}
-            <div className="w-full grid grid-cols-3 gap-2">
-              <div className="rounded-xl border border-[color:var(--line)] bg-[var(--glass)] p-3 text-center">
-                <p className="text-[color:var(--muted)] text-[10px] font-semibold uppercase tracking-widest mb-0.5">Best</p>
-                <p className="font-[family-name:var(--font-heading)] font-bold text-2xl text-[color:var(--color-cta)] tabular-nums">{bestWPM}</p>
-              </div>
-              <div className="rounded-xl border border-[color:var(--line)] bg-[var(--glass)] p-3 text-center">
-                <p className="text-[color:var(--muted)] text-[10px] font-semibold uppercase tracking-widest mb-0.5">Streak</p>
-                <p className="font-[family-name:var(--font-heading)] font-bold text-2xl text-[color:var(--color-cta-alt)] tabular-nums">{streak.current}</p>
-              </div>
-              <div className="rounded-xl border border-[color:var(--line)] bg-[var(--glass)] p-3 text-center">
-                <p className="text-[color:var(--muted)] text-[10px] font-semibold uppercase tracking-widest mb-0.5">Time</p>
-                <p className="font-[family-name:var(--font-heading)] font-bold text-2xl text-[color:var(--ink)] tabular-nums">
-                  {testDuration >= 60 ? `${testDuration / 60}m` : `${testDuration}s`}
-                </p>
-              </div>
-            </div>
           </div>
         )}
       </main>
@@ -320,6 +369,33 @@ export default function App() {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
       />
+    </div>
+  )
+}
+
+/* ── Small shared sub-components ── */
+
+function StatPill({ label, value, color }: { label: string; value: number | string; color: string }) {
+  return (
+    <div className="text-center">
+      <p className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: 'var(--muted)' }}>{label}</p>
+      <p className="font-[family-name:var(--font-heading)] font-bold text-2xl tabular-nums leading-none" style={{ color }}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function Kbd({ label, desc }: { label: string; desc: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <kbd
+        className="px-2 py-1 rounded text-[11px] font-mono font-medium"
+        style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+      >
+        {label}
+      </kbd>
+      <span className="text-xs hidden sm:inline" style={{ color: 'var(--muted)' }}>{desc}</span>
     </div>
   )
 }

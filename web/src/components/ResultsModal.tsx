@@ -9,95 +9,133 @@ interface ResultsModalProps {
 }
 
 const PERF_LEVELS = [
-  { min: 100, label: 'Lightning Fast', color: 'text-[color:var(--color-cta)]' },
-  { min: 80,  label: 'Excellent',      color: 'text-[color:var(--color-cta)]' },
-  { min: 60,  label: 'Great',          color: 'text-[color:var(--success)]' },
-  { min: 40,  label: 'Good',           color: 'text-[color:var(--warning)]' },
-  { min: 0,   label: 'Keep Practicing',color: 'text-[color:var(--muted)]' },
+  { min: 100, label: 'Lightning ⚡', color: 'var(--color-cta)' },
+  { min: 80,  label: 'Excellent',    color: 'var(--color-cta)' },
+  { min: 60,  label: 'Great',        color: 'var(--success)' },
+  { min: 40,  label: 'Good',         color: 'var(--warning)' },
+  { min: 0,   label: 'Keep Going',   color: 'var(--muted)' },
 ]
 
 export function ResultsModal({ isOpen, results, difficulty, onClose, onRetry }: ResultsModalProps) {
   if (!isOpen || !results) return null
 
   const perf = PERF_LEVELS.find((l) => results.wpm >= l.min) ?? PERF_LEVELS.at(-1)!
+  const wpm  = Math.round(results.wpm)
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-[fade-in_0.2s_ease-out]"
-      style={{ background: 'var(--overlay)' }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-[fade-in_0.2s_ease-out]"
+      style={{ background: 'var(--overlay)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-[var(--radius-card)] border border-[color:var(--line)] bg-[color:var(--panel)] shadow-2xl p-7 animate-[slide-up_0.25s_ease-out] max-h-[90svh] overflow-y-auto"
+        className="w-full sm:max-w-md rounded-t-[var(--radius-card)] sm:rounded-[var(--radius-card)] animate-[slide-up_0.3s_cubic-bezier(0.16,1,0.3,1)] max-h-[92svh] overflow-y-auto"
+        style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="text-center mb-6">
-          <p className={`font-[family-name:var(--font-heading)] font-bold text-4xl mb-1 ${perf.color}`}>
-            {perf.label}
-          </p>
-          <p className="text-[color:var(--muted)] text-sm">
-            {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} mode
-          </p>
-        </div>
+        <div className="p-6 sm:p-8">
+          {/* Drag handle on mobile */}
+          <div className="flex justify-center mb-5 sm:hidden">
+            <div className="w-10 h-1 rounded-full" style={{ background: 'var(--line)' }} />
+          </div>
 
-        {/* Main stats */}
-        <div className="grid grid-cols-3 gap-3 mb-5">
-          {[
-            {
-              label: 'WPM',
-              value: Math.round(results.wpm),
-              color: 'text-[color:var(--color-cta)]',
-            },
-            {
-              label: 'Accuracy',
-              value: `${results.accuracy.toFixed(1)}%`,
-              color: results.accuracy < 80 ? 'text-[color:var(--error)]' : 'text-[color:var(--color-cta)]',
-            },
-            {
-              label: 'Errors',
-              value: results.errors,
-              color: results.errors > 0 ? 'text-[color:var(--error)]' : 'text-[color:var(--success)]',
-            },
-          ].map((s) => (
-            <div key={s.label} className="rounded-xl bg-[color:var(--panel)] p-3 text-center border border-[color:var(--line)]">
-              <p className="text-[color:var(--muted)] text-[10px] font-semibold uppercase tracking-widest mb-1">{s.label}</p>
-              <p className={`font-[family-name:var(--font-heading)] font-bold text-2xl tabular-nums ${s.color}`}>{s.value}</p>
-            </div>
-          ))}
-        </div>
+          {/* Performance label */}
+          <div className="text-center mb-6">
+            <p className="text-sm font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--muted)' }}>
+              {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} mode
+            </p>
+            <p
+              className="font-[family-name:var(--font-heading)] font-bold text-3xl mb-1"
+              style={{ color: perf.color }}
+            >
+              {perf.label}
+            </p>
+          </div>
 
-        {/* Detail rows */}
-        <div className="rounded-xl bg-[color:var(--panel)] border border-[color:var(--line)] p-4 mb-6 space-y-2.5">
-          {[
-            { label: 'Duration',       value: `${results.duration}s` },
-            { label: 'Correct chars',  value: results.correctChars },
-            { label: 'Total chars',    value: results.totalChars },
-          ].map((r) => (
-            <div key={r.label} className="flex justify-between items-center text-sm">
-              <span className="text-[color:var(--muted)]">{r.label}</span>
-              <span className="font-medium text-[color:var(--ink)]">{r.value}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 rounded-[var(--radius-btn)] border border-[color:var(--line)] text-[color:var(--muted)] hover:text-[color:var(--ink)] transition-all duration-200 font-semibold text-sm min-h-[44px]"
+          {/* Big WPM */}
+          <div
+            className="rounded-[var(--radius-card)] p-6 text-center mb-4"
+            style={{ background: 'color-mix(in srgb, var(--color-cta) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--color-cta) 20%, transparent)' }}
           >
-            Close
-          </button>
-          <button
-            onClick={onRetry}
-            style={{ background: 'var(--gradient-cta)', color: 'var(--paper)' }}
-            className="flex-1 py-3 rounded-[var(--radius-btn)] font-bold text-sm transition-all duration-200 active:scale-[0.98] hover:opacity-90 min-h-[44px]"
+            <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--color-cta)' }}>
+              Words per minute
+            </p>
+            <p
+              className="font-[family-name:var(--font-heading)] font-bold tabular-nums leading-none"
+              style={{ fontSize: '4.5rem', color: 'var(--color-cta)' }}
+            >
+              {wpm}
+            </p>
+          </div>
+
+          {/* Accuracy + Errors */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <ResultStat
+              label="Accuracy"
+              value={`${results.accuracy.toFixed(1)}%`}
+              color={results.accuracy >= 95 ? 'var(--success)' : results.accuracy >= 80 ? 'var(--warning)' : 'var(--error)'}
+            />
+            <ResultStat
+              label="Errors"
+              value={String(results.errors)}
+              color={results.errors === 0 ? 'var(--success)' : 'var(--error)'}
+            />
+          </div>
+
+          {/* Detail rows */}
+          <div
+            className="rounded-[var(--radius-btn)] p-4 mb-6 space-y-2"
+            style={{ background: 'color-mix(in srgb, var(--ink) 4%, transparent)', border: '1px solid var(--line)' }}
           >
-            Try Again
-          </button>
+            {[
+              { label: 'Duration',       value: `${results.duration}s` },
+              { label: 'Correct chars',  value: String(results.correctChars) },
+              { label: 'Total chars',    value: String(results.totalChars) },
+            ].map((r) => (
+              <div key={r.label} className="flex justify-between items-center text-sm">
+                <span style={{ color: 'var(--muted)' }}>{r.label}</span>
+                <span className="font-medium tabular-nums" style={{ color: 'var(--ink)' }}>{r.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 py-3 rounded-[var(--radius-btn)] font-semibold text-sm transition-all duration-150 hover:scale-[1.02] active:scale-[0.97] min-h-[44px]"
+              style={{ border: '1px solid var(--line)', color: 'var(--muted)', background: 'transparent' }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--ink)' }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted)' }}
+            >
+              Close
+            </button>
+            <button
+              onClick={onRetry}
+              className="flex-1 py-3 rounded-[var(--radius-btn)] font-bold text-sm transition-all duration-150 hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] min-h-[44px]"
+              style={{ background: 'var(--gradient-cta)', color: 'var(--paper)', boxShadow: 'var(--shadow-cta)' }}
+            >
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ResultStat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div
+      className="rounded-[var(--radius-btn)] p-4 text-center"
+      style={{ background: 'color-mix(in srgb, var(--ink) 4%, transparent)', border: '1px solid var(--line)' }}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--muted)' }}>
+        {label}
+      </p>
+      <p className="font-[family-name:var(--font-heading)] font-bold text-2xl tabular-nums" style={{ color }}>
+        {value}
+      </p>
     </div>
   )
 }

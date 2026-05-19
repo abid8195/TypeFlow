@@ -9,15 +9,21 @@ export function Timer({ timeRemaining, isActive }: TimerProps) {
   const isLow = timeRemaining <= 10 && isActive
 
   return (
-    <div className="text-center">
-      <p className="text-[color:var(--muted)] text-xs font-semibold uppercase tracking-widest mb-1">
-        {isActive ? 'Remaining' : 'Duration'}
+    <div className="flex flex-col items-start">
+      <p
+        className="text-[10px] font-semibold uppercase tracking-widest mb-0.5"
+        style={{ color: 'var(--muted)' }}
+      >
+        {isActive ? 'Time left' : 'Duration'}
       </p>
       <p
-        className={`font-[family-name:var(--font-heading)] font-bold tabular-nums transition-colors duration-300 ${
-          isLow ? 'text-6xl sm:text-7xl animate-[pulse-subtle_1s_ease-in-out_infinite]' : 'text-5xl sm:text-6xl'
+        className={`font-[family-name:var(--font-heading)] font-bold tabular-nums leading-none transition-colors duration-300 ${
+          isLow ? 'animate-[pulse-subtle_0.8s_ease-in-out_infinite]' : ''
         }`}
-        style={{ color: isLow ? 'var(--error)' : 'var(--color-cta)' }}
+        style={{
+          fontSize: 'clamp(2.5rem, 6vw, 4rem)',
+          color: isLow ? 'var(--error)' : 'var(--color-cta)',
+        }}
       >
         {formatTime(timeRemaining)}
       </p>

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ─── Tailwind 4 theme tokens (reference FreeAppStore vars — no hardcodes) ── */
+/* ─── Tailwind 4 theme tokens ──────────────────────────────────────────────── */
 @theme {
   /* Fonts */
   --font-sans:    'Manrope', system-ui, -apple-system, sans-serif;
@@ -17,54 +17,53 @@
   --color-warning:          var(--warning);
   --color-error:            var(--error);
 
-  /* App accent colours (cyan/purple palette) */
+  /* App accent colours */
   --color-accent:           var(--color-cta);
   --color-accent-secondary: var(--color-cta-alt);
 
-  /* Border radius — FreeAppStore spec */
+  /* Border radius */
   --radius-card: 1.25rem;
   --radius-btn:  0.75rem;
 
-  /* Responsive breakpoint */
+  /* Responsive breakpoints */
   --breakpoint-xs: 360px;
 
   /* Animations */
   --animate-pulse-subtle: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  --animate-fade-in:      fade-in 0.25s ease-out;
-  --animate-slide-up:     slide-up 0.3s ease-out;
+  --animate-fade-in:      fade-in 0.2s ease-out;
+  --animate-slide-up:     slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-cursor-blink: cursor-blink 1.1s step-end infinite;
 
   @keyframes pulse-subtle {
     0%, 100% { opacity: 1; }
-    50%       { opacity: 0.6; }
+    50%       { opacity: 0.55; }
   }
   @keyframes fade-in {
     from { opacity: 0; }
     to   { opacity: 1; }
   }
   @keyframes slide-up {
-    from { transform: translateY(12px); opacity: 0; }
+    from { transform: translateY(20px); opacity: 0; }
     to   { transform: translateY(0);    opacity: 1; }
+  }
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
   }
 }
 
-/* ─── App-specific design tokens (platform tokens are NOT redefined here) ──── */
-/*     --paper, --ink, --muted, --line, --panel, --glass, --dock,               */
-/*     --accent, --success, --warning, --error  are owned by the FAS template.  */
+/* ─── App-specific tokens only — platform tokens NOT redefined ──────────────── */
 :root {
-  /* App-specific accent palette */
-  --color-cta:     #00d9ff;   /* TypeFlow cyan — primary interactive colour */
-  --color-cta-alt: #7c3aed;   /* TypeFlow purple — secondary accent */
-
-  /* Reusable gradient tokens (no hardcoded hex in components) */
+  --color-cta:      #00d9ff;
+  --color-cta-alt:  #7c3aed;
   --gradient-brand: linear-gradient(90deg,  var(--color-cta) 0%, var(--color-cta-alt) 100%);
   --gradient-cta:   linear-gradient(135deg, var(--color-cta) 0%, var(--color-cta-alt) 100%);
-  --shadow-cta:     0 4px 20px rgba(0, 217, 255, 0.25);
-
-  /* Overlay used by modals */
-  --overlay: rgba(0, 0, 0, 0.7);
+  --shadow-cta:     0 4px 24px rgba(0, 217, 255, 0.3);
+  --shadow-cta-lg:  0 8px 40px rgba(0, 217, 255, 0.2);
+  --overlay:        rgba(0, 0, 0, 0.75);
 }
 
-/* ─── PWA / mobile root sizing ────────────────────────────────────────────── */
+/* ─── Root sizing ──────────────────────────────────────────────────────────── */
 html,
 body,
 #root {
@@ -89,7 +88,7 @@ body {
   font-family: var(--font-sans);
 }
 
-/* ─── Safe-area insets (notched devices) ──────────────────────────────────── */
+/* ─── Safe-area insets ────────────────────────────────────────────────────── */
 @supports (padding: max(0px)) {
   body {
     padding-left:   max(0px, env(safe-area-inset-left));
@@ -126,15 +125,17 @@ button:disabled {
 
 /* ─── Focus ring ──────────────────────────────────────────────────────────── */
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+a:focus-visible {
   outline: 2px solid var(--color-cta);
   outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* ─── Scrollbar (modals only) ─────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar       { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* ─── Utility ─────────────────────────────────────────────────────────────── */
@@ -150,7 +151,12 @@ input:focus-visible {
   border-width: 0;
 }
 
-/* Dark mode (always active – app is dark-only) */
+/* ─── Typing words transition ──────────────────────────────────────────────── */
+.words-inner {
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark mode */
 @media (prefers-color-scheme: dark) {
   :root { color-scheme: dark; }
 }
