@@ -98,7 +98,7 @@ export function TypingArea({
                 className="inline-block mr-3"
                 style={{
                   fontSize: '1.375rem',      // 22px — generous but not huge
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  fontFamily: 'monospace',
                   letterSpacing: '0.01em',
                 }}
               >
