@@ -1,13 +1,17 @@
-// Local storage utility functions for persistence
+// ─── Storage schema version ───────────────────────────────────────────────────
+// Bump when the shape of any stored object changes to trigger safe migration.
+const SETTINGS_VERSION = 2
 
-interface StoredStats {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface StoredStats {
   bestWPM: number
   totalTests: number
   totalTyped: number
   averageAccuracy: number
 }
 
-interface TypingHistory {
+export interface TypingHistoryEntry {
   id: string
   timestamp: number
   wpm: number
@@ -15,26 +19,31 @@ interface TypingHistory {
   duration: number
   errors: number
   difficulty: string
+  wpmSamples: number[]   // per-second WPM snapshots during the test
 }
 
-interface UserSettings {
+export interface UserSettings {
+  _v: number
   theme: 'dark' | 'light'
   testDuration: number
-  difficulty: 'easy' | 'medium' | 'hard'
+  difficulty: 'easy' | 'medium' | 'hard' | 'quotes'
   soundEnabled: boolean
   selectedLanguage: string
 }
 
-const STORAGE_KEYS = {
-  BEST_WPM: 'typeflow_best_wpm',
-  STATS: 'typeflow_stats',
-  HISTORY: 'typeflow_history',
-  SETTINGS: 'typeflow_settings',
-  TYPING_STREAK: 'typeflow_streak',
-}
+// ─── Keys ─────────────────────────────────────────────────────────────────────
 
-// Default settings
-const defaultSettings: UserSettings = {
+const KEYS = {
+  STATS:    'typeflow_stats',
+  HISTORY:  'typeflow_history',
+  SETTINGS: 'typeflow_settings',
+  STREAK:   'typeflow_streak',
+} as const
+
+// ─── Defaults ─────────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS: UserSettings = {
+  _v: SETTINGS_VERSION,
   theme: 'dark',
   testDuration: 60,
   difficulty: 'medium',
@@ -42,203 +51,124 @@ const defaultSettings: UserSettings = {
   selectedLanguage: 'en',
 }
 
-/**
- * Get best WPM from localStorage
- */
-export function getBestWPM(): number {
+// ─── Safe JSON read ───────────────────────────────────────────────────────────
+
+function safeRead<T>(key: string): T | null {
   try {
-    const stored = localStorage.getItem(STORAGE_KEYS.BEST_WPM)
-    return stored ? parseInt(stored, 10) : 0
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : null
   } catch {
-    return 0
+    return null
   }
 }
 
-/**
- * Save best WPM to localStorage
- */
-export function saveBestWPM(wpm: number): void {
+function safeWrite(key: string, value: unknown): void {
   try {
-    const current = getBestWPM()
-    if (wpm > current) {
-      localStorage.setItem(STORAGE_KEYS.BEST_WPM, wpm.toString())
-    }
+    localStorage.setItem(key, JSON.stringify(value))
   } catch {
-    // Silently fail - storage might be disabled
+    // Storage full or unavailable — degrade silently
   }
 }
 
-/**
- * Get typing statistics from localStorage
- */
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+export function getSettings(): UserSettings {
+  const stored = safeRead<UserSettings>(KEYS.SETTINGS)
+  // Re-use stored values only when the schema version matches
+  if (stored && stored._v === SETTINGS_VERSION) {
+    return { ...DEFAULT_SETTINGS, ...stored }
+  }
+  return { ...DEFAULT_SETTINGS }
+}
+
+export function saveSettings(settings: Partial<UserSettings>): void {
+  const current = getSettings()
+  safeWrite(KEYS.SETTINGS, { ...current, ...settings, _v: SETTINGS_VERSION })
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+const DEFAULT_STATS: StoredStats = { bestWPM: 0, totalTests: 0, totalTyped: 0, averageAccuracy: 0 }
+
 export function getStats(): StoredStats {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.STATS)
-    if (stored) {
-      return JSON.parse(stored)
-    }
-  } catch {
-    // Silently fail
-  }
-
-  return {
-    bestWPM: 0,
-    totalTests: 0,
-    totalTyped: 0,
-    averageAccuracy: 0,
-  }
+  return safeRead<StoredStats>(KEYS.STATS) ?? { ...DEFAULT_STATS }
 }
 
-/**
- * Update statistics after test completion
- */
+export function getBestWPM(): number {
+  return getStats().bestWPM
+}
+
 export function updateStats(wpm: number, accuracy: number, typedCount: number): void {
-  try {
-    const stats = getStats()
-    stats.bestWPM = Math.max(stats.bestWPM, wpm)
-    stats.totalTests += 1
-    stats.totalTyped += typedCount
-    stats.averageAccuracy =
-      (stats.averageAccuracy * (stats.totalTests - 1) + accuracy) / stats.totalTests
-
-    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats))
-  } catch {
-    // Silently fail
-  }
+  const s = getStats()
+  s.bestWPM       = Math.max(s.bestWPM, wpm)
+  s.totalTests   += 1
+  s.totalTyped   += typedCount
+  s.averageAccuracy = (s.averageAccuracy * (s.totalTests - 1) + accuracy) / s.totalTests
+  safeWrite(KEYS.STATS, s)
 }
 
-/**
- * Get typing history from localStorage
- */
-export function getHistory(): TypingHistory[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.HISTORY)
-    if (stored) {
-      return JSON.parse(stored)
-    }
-  } catch {
-    // Silently fail
-  }
+// ─── History (last 20 tests) ──────────────────────────────────────────────────
 
-  return []
+const MAX_HISTORY = 20
+
+export function getHistory(): TypingHistoryEntry[] {
+  return safeRead<TypingHistoryEntry[]>(KEYS.HISTORY) ?? []
 }
 
-/**
- * Add new test result to history
- */
 export function addToHistory(
   wpm: number,
   accuracy: number,
   duration: number,
   errors: number,
-  difficulty: string
+  difficulty: string,
+  wpmSamples: number[] = [],
 ): void {
-  try {
-    const history = getHistory()
-    const newEntry: TypingHistory = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
-      wpm,
-      accuracy,
-      duration,
-      errors,
-      difficulty,
-    }
-
-    history.push(newEntry)
-    // Keep only last 100 tests
-    if (history.length > 100) {
-      history.shift()
-    }
-
-    localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history))
-  } catch {
-    // Silently fail
+  const history = getHistory()
+  const entry: TypingHistoryEntry = {
+    id: Date.now().toString(),
+    timestamp: Date.now(),
+    wpm,
+    accuracy,
+    duration,
+    errors,
+    difficulty,
+    wpmSamples,
   }
+  history.push(entry)
+  if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY)
+  safeWrite(KEYS.HISTORY, history)
 }
 
-/**
- * Get user settings from localStorage
- */
-export function getSettings(): UserSettings {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS)
-    if (stored) {
-      return { ...defaultSettings, ...JSON.parse(stored) }
-    }
-  } catch {
-    // Silently fail
-  }
+// ─── Streak ───────────────────────────────────────────────────────────────────
 
-  return defaultSettings
+interface StreakData { current: number; best: number; lastTestDate: number }
+const DEFAULT_STREAK: StreakData = { current: 0, best: 0, lastTestDate: 0 }
+
+export function getTypingStreak(): StreakData {
+  return safeRead<StreakData>(KEYS.STREAK) ?? { ...DEFAULT_STREAK }
 }
 
-/**
- * Save user settings to localStorage
- */
-export function saveSettings(settings: Partial<UserSettings>): void {
-  try {
-    const current = getSettings()
-    const updated = { ...current, ...settings }
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated))
-  } catch {
-    // Silently fail
-  }
-}
-
-/**
- * Get typing streak information
- */
-export function getTypingStreak(): { current: number; best: number; lastTestDate: number } {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.TYPING_STREAK)
-    if (stored) {
-      return JSON.parse(stored)
-    }
-  } catch {
-    // Silently fail
-  }
-
-  return { current: 0, best: 0, lastTestDate: 0 }
-}
-
-/**
- * Update typing streak
- */
 export function updateTypingStreak(): void {
-  try {
-    const streak = getTypingStreak()
-    const now = Date.now()
-    const dayInMs = 24 * 60 * 60 * 1000
-    const timeSinceLastTest = now - streak.lastTestDate
+  const streak = getTypingStreak()
+  const now    = Date.now()
+  const DAY_MS = 86_400_000
 
-    if (timeSinceLastTest < dayInMs && streak.lastTestDate !== 0) {
-      // Same day, don't increment
-    } else if (timeSinceLastTest < 2 * dayInMs || streak.lastTestDate === 0) {
-      // Within 48 hours (allows for timezone variance), or first test
+  if (streak.lastTestDate === 0) {
+    streak.current = 1
+  } else {
+    const elapsed = now - streak.lastTestDate
+    if (elapsed < DAY_MS) {
+      // Same calendar day — streak unchanged
+    } else if (elapsed < DAY_MS * 2) {
+      // Consecutive day
       streak.current += 1
-      streak.best = Math.max(streak.best, streak.current)
     } else {
-      // More than 48 hours, reset streak
+      // Missed a day — reset
       streak.current = 1
     }
-
-    streak.lastTestDate = now
-    localStorage.setItem(STORAGE_KEYS.TYPING_STREAK, JSON.stringify(streak))
-  } catch {
-    // Silently fail
   }
-}
 
-/**
- * Clear all stored data (for development/testing)
- */
-export function clearAllData(): void {
-  try {
-    Object.values(STORAGE_KEYS).forEach((key) => {
-      localStorage.removeItem(key)
-    })
-  } catch {
-    // Silently fail
-  }
+  streak.best         = Math.max(streak.best, streak.current)
+  streak.lastTestDate = now
+  safeWrite(KEYS.STREAK, streak)
 }

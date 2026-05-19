@@ -1,9 +1,11 @@
 interface SettingsModalProps {
-  isOpen: boolean
-  onClose: () => void
+  isOpen:        boolean
+  soundEnabled:  boolean
+  onSoundToggle: (v: boolean) => void
+  onClose:       () => void
 }
 
-export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+export function SettingsModal({ isOpen, soundEnabled, onSoundToggle, onClose }: SettingsModalProps) {
   if (!isOpen) return null
 
   return (
@@ -18,7 +20,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 sm:p-8">
-          {/* Drag handle on mobile */}
+          {/* Mobile drag handle */}
           <div className="flex justify-center mb-5 sm:hidden">
             <div className="w-10 h-1 rounded-full" style={{ background: 'var(--line)' }} />
           </div>
@@ -27,35 +29,59 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             About TypeFlow
           </h2>
 
-          <div className="space-y-0 mb-6 rounded-[var(--radius-btn)] overflow-hidden" style={{ border: '1px solid var(--line)' }}>
-            {[
-              { label: 'Storage',   value: 'localStorage only', highlight: false },
-              { label: 'Tracking',  value: 'None',              highlight: true },
-              { label: 'Analytics', value: 'None',              highlight: true },
-              { label: 'Accounts',  value: 'Not required',      highlight: true },
-              { label: 'License',   value: 'MIT',               highlight: false },
-              { label: 'Version',   value: '1.0.0',             highlight: false },
-            ].map(({ label, value, highlight }, i, arr) => (
+          {/* Settings rows */}
+          <div className="rounded-[var(--radius-btn)] overflow-hidden mb-6" style={{ border: '1px solid var(--line)' }}>
+
+            {/* Sound toggle — interactive */}
+            <div
+              className="flex justify-between items-center px-4 py-3 text-sm"
+              style={{ borderBottom: '1px solid var(--line)' }}
+            >
+              <span style={{ color: 'var(--muted)' }}>Sound feedback</span>
+              <button
+                onClick={() => onSoundToggle(!soundEnabled)}
+                className="relative w-11 h-6 rounded-full transition-all duration-200"
+                style={{
+                  background: soundEnabled ? 'var(--color-cta)' : 'var(--line)',
+                  minHeight: '1.5rem',
+                  minWidth: '2.75rem',
+                }}
+                aria-label={`Sound ${soundEnabled ? 'on' : 'off'}`}
+                role="switch"
+                aria-checked={soundEnabled}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-all duration-200"
+                  style={{
+                    background: 'var(--paper)',
+                    transform: soundEnabled ? 'translateX(1.25rem)' : 'translateX(0)',
+                  }}
+                />
+              </button>
+            </div>
+
+            {/* Info rows */}
+            {([
+              ['Storage',   'localStorage only', false],
+              ['Tracking',  'None',              true],
+              ['Analytics', 'None',              true],
+              ['Accounts',  'Not required',      true],
+              ['License',   'MIT',               false],
+              ['Version',   '1.0.0',             false],
+            ] as [string, string, boolean][]).map(([label, value, highlight], i, arr) => (
               <div
                 key={label}
                 className="flex justify-between items-center px-4 py-3 text-sm"
-                style={{
-                  borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none',
-                  background: 'transparent',
-                }}
+                style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}
               >
                 <span style={{ color: 'var(--muted)' }}>{label}</span>
-                <span className="font-medium" style={{ color: highlight ? 'var(--success)' : 'var(--ink)' }}>
-                  {value}
-                </span>
+                <span className="font-medium" style={{ color: highlight ? 'var(--success)' : 'var(--ink)' }}>{value}</span>
               </div>
             ))}
           </div>
 
-          <div
-            className="rounded-[var(--radius-btn)] p-4 mb-6 text-center"
-            style={{ background: 'color-mix(in srgb, var(--ink) 4%, transparent)', border: '1px solid var(--line)' }}
-          >
+          {/* Privacy note */}
+          <div className="rounded-[var(--radius-btn)] p-4 mb-6 text-center" style={{ background: 'color-mix(in srgb, var(--ink) 4%, transparent)', border: '1px solid var(--line)' }}>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
               TypeFlow is free, offline-first, and open-source.<br />
               Your data stays in your browser — always.

@@ -1,13 +1,13 @@
-import { useLayoutEffect, useRef, useMemo } from 'react'
+import { useLayoutEffect, useRef, useMemo, useState, useEffect } from 'react'
+import type { WordOutcome } from '../App'
 
 interface TypingAreaProps {
-  testWords: string[]
-  userInput: string
+  testWords:        string[]
+  userInput:        string
   currentWordIndex: number
-  wordResults: boolean[]        // true = completed correctly
-  isTestActive: boolean
-  onInputChange: (value: string) => void
-  onSkipWord: () => void
+  wordOutcomes:     WordOutcome[]
+  isTestActive:     boolean
+  onSkipWord:       () => void
 }
 
 type CharStatus = 'correct' | 'incorrect' | 'pending' | 'extra'
@@ -19,22 +19,55 @@ const CHAR_COLOR: Record<CharStatus, string> = {
   extra:     'var(--error)',
 }
 
-const LINE_HEIGHT_PX = 44   // px — matches font+padding below; must stay in sync with CSS
-const VISIBLE_LINES  = 3    // rows visible in the clipping container
+const LINE_HEIGHT_PX = 44
+const VISIBLE_LINES  = 3
 
 export function TypingArea({
   testWords,
   userInput,
   currentWordIndex,
-  wordResults,
+  wordOutcomes,
   isTestActive,
-  onInputChange,
   onSkipWord,
 }: TypingAreaProps) {
   const innerRef = useRef<HTMLDivElement>(null)
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([])
 
-  // Scroll the inner div so current word is always on the first visible row
+  // Track which word just flashed (correct completion) for CSS animation
+  const [flashIndex, setFlashIndex] = useState<number | null>(null)
+  // Track whether to shake current word (error input)
+  const [shaking, setShaking] = useState(false)
+  const prevOutcomesLen = useRef(0)
+  const prevUserInput   = useRef('')
+
+  // Detect a newly completed word → flash if correct, shake parent if incorrect
+  useEffect(() => {
+    if (wordOutcomes.length > prevOutcomesLen.current) {
+      const newOutcome = wordOutcomes[wordOutcomes.length - 1]
+      if (newOutcome === 'correct') {
+        setFlashIndex(wordOutcomes.length - 1)
+        setTimeout(() => setFlashIndex(null), 420)
+      }
+    }
+    prevOutcomesLen.current = wordOutcomes.length
+  }, [wordOutcomes])
+
+  // Detect a new incorrect character typed → shake the word
+  useEffect(() => {
+    const prev = prevUserInput.current
+    const curr = userInput
+    if (curr.length > prev.length) {
+      const newChar = curr[curr.length - 1]
+      const expected = testWords[currentWordIndex]?.[curr.length - 1]
+      if (expected !== undefined && newChar !== expected) {
+        setShaking(true)
+        setTimeout(() => setShaking(false), 360)
+      }
+    }
+    prevUserInput.current = curr
+  }, [userInput, currentWordIndex, testWords])
+
+  // Scroll: keep current word on the top visible row
   useLayoutEffect(() => {
     const el = wordRefs.current[currentWordIndex]
     if (!el || !innerRef.current) return
@@ -52,9 +85,7 @@ export function TypingArea({
           : 'pending'
       )
     }
-    for (let i = currentWord.length; i < userInput.length; i++) {
-      result.push('extra')
-    }
+    for (let i = currentWord.length; i < userInput.length; i++) result.push('extra')
     return result
   }, [testWords, currentWordIndex, userInput])
 
@@ -66,64 +97,48 @@ export function TypingArea({
       {/* ── Clipping window ── */}
       <div
         className="w-full relative select-none"
-        style={{
-          height: `${LINE_HEIGHT_PX * VISIBLE_LINES}px`,
-          overflow: 'hidden',
-        }}
+        style={{ height: `${LINE_HEIGHT_PX * VISIBLE_LINES}px`, overflow: 'hidden' }}
       >
-        {/* Top fade — hides partially-scrolled words gracefully */}
-        <div
-          className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
-          style={{
-            height: '1.5rem',
-            background: 'linear-gradient(to bottom, var(--paper), transparent)',
-          }}
-        />
+        {/* Top fade */}
+        <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none" style={{ height: '1.5rem', background: 'linear-gradient(to bottom, var(--paper), transparent)' }} />
 
-        {/* Inner scrolling word strip */}
-        <div
-          ref={innerRef}
-          className="words-inner absolute inset-x-0 top-0"
-          style={{ lineHeight: `${LINE_HEIGHT_PX}px` }}
-        >
+        {/* Inner scrolling strip */}
+        <div ref={innerRef} className="words-inner absolute inset-x-0 top-0" style={{ lineHeight: `${LINE_HEIGHT_PX}px` }}>
           {testWords.map((word, wi) => {
             const isCurrentWord = wi === currentWordIndex
             const isCompleted   = wi < currentWordIndex
-            const isCorrect     = wordResults[wi]   // only meaningful when isCompleted
+            const outcome       = wordOutcomes[wi]
+            const isFlashing    = flashIndex === wi
 
             return (
               <span
                 key={wi}
                 ref={(el) => { wordRefs.current[wi] = el }}
                 className="inline-block mr-3"
-                style={{
-                  fontSize: '1.375rem',      // 22px — generous but not huge
-                  fontFamily: 'monospace',
-                  letterSpacing: '0.01em',
-                }}
+                style={{ fontSize: '1.375rem', fontFamily: 'monospace', letterSpacing: '0.01em' }}
               >
                 {isCurrentWord ? (
-                  /* ── Active word — character-level coloring + cursor ── */
-                  <span className="relative">
-                    {/* Characters already typed */}
+                  /* ── Active word ── */
+                  <span
+                    className="relative"
+                    style={{
+                      display: 'inline-block',
+                      animation: shaking ? 'shake 0.35s cubic-bezier(0.36,0.07,0.19,0.97)' : undefined,
+                    }}
+                  >
                     {Array.from(testWords[currentWordIndex]).map((char, ci) => (
                       <span
                         key={ci}
-                        style={{
-                          color: CHAR_COLOR[charStatuses[ci] ?? 'pending'],
-                          transition: 'color 60ms ease',
-                        }}
+                        style={{ color: CHAR_COLOR[charStatuses[ci] ?? 'pending'], transition: 'color 50ms ease' }}
                       >
                         {char}
                       </span>
                     ))}
-                    {/* Extra chars typed beyond word length */}
+                    {/* Extra chars */}
                     {userInput.slice(testWords[currentWordIndex].length).split('').map((char, ci) => (
-                      <span key={`ex-${ci}`} style={{ color: CHAR_COLOR.extra, opacity: 0.65 }}>
-                        {char}
-                      </span>
+                      <span key={`ex-${ci}`} style={{ color: CHAR_COLOR.extra, opacity: 0.65 }}>{char}</span>
                     ))}
-                    {/* Blinking cursor — inserted after last typed position */}
+                    {/* Blinking cursor */}
                     <span
                       className="animate-[cursor-blink_1.1s_step-end_infinite]"
                       style={{
@@ -140,20 +155,21 @@ export function TypingArea({
                     />
                   </span>
                 ) : isCompleted ? (
-                  /* ── Completed word — solid color based on correctness ── */
+                  /* ── Completed word ── */
                   <span
                     style={{
-                      color: isCorrect ? 'var(--success)' : 'var(--error)',
-                      opacity: 0.55,
+                      color: outcome === 'correct' ? 'var(--success)' : 'var(--error)',
+                      opacity: isFlashing ? 1 : 0.45,
+                      animation: isFlashing ? 'word-flash 0.4s ease-out forwards' : undefined,
+                      transition: 'opacity 0.2s ease',
+                      textDecoration: outcome === 'skipped' ? 'line-through' : undefined,
                     }}
                   >
                     {word}
                   </span>
                 ) : (
-                  /* ── Upcoming word — muted ── */
-                  <span style={{ color: 'var(--muted)' }}>
-                    {word}
-                  </span>
+                  /* ── Upcoming word ── */
+                  <span style={{ color: 'var(--muted)' }}>{word}</span>
                 )}
               </span>
             )
@@ -161,29 +177,8 @@ export function TypingArea({
         </div>
 
         {/* Bottom fade */}
-        <div
-          className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
-          style={{
-            height: '2.5rem',
-            background: 'linear-gradient(to top, var(--paper), transparent)',
-          }}
-        />
+        <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none" style={{ height: '2.5rem', background: 'linear-gradient(to top, var(--paper), transparent)' }} />
       </div>
-
-      {/* ── Input capture (sr-only) ── */}
-      <input
-        type="text"
-        value={userInput}
-        onChange={(e) => onInputChange(e.target.value)}
-        disabled={!isTestActive}
-        className="sr-only"
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        aria-label="Typing input — type the words shown above"
-        id="typing-input"
-      />
 
       {/* ── Skip button ── */}
       <div className="flex justify-center">
@@ -191,12 +186,7 @@ export function TypingArea({
           onClick={onSkipWord}
           disabled={!isTestActive}
           className="px-4 py-2 rounded-[var(--radius-btn)] text-xs font-semibold uppercase tracking-widest transition-all duration-150 hover:scale-[1.03] active:scale-[0.97]"
-          style={{
-            border: '1px solid var(--line)',
-            color: 'var(--muted)',
-            background: 'transparent',
-            minHeight: '36px',
-          }}
+          style={{ border: '1px solid var(--line)', color: 'var(--muted)', background: 'transparent', minHeight: '36px' }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--glass)' }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
         >

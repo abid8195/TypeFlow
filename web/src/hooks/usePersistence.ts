@@ -1,88 +1,79 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   getSettings,
   saveSettings,
   getBestWPM,
   getTypingStreak,
+  getHistory,
   addToHistory,
   updateStats,
   updateTypingStreak,
+  type TypingHistoryEntry,
+  type UserSettings,
 } from '../utils/storage'
 
-interface UserSettings {
-  theme: 'dark' | 'light'
-  testDuration: number
-  difficulty: 'easy' | 'medium' | 'hard'
-  soundEnabled: boolean
-  selectedLanguage: string
-}
+// ─── Settings ─────────────────────────────────────────────────────────────────
 
-/**
- * Hook for managing user settings with localStorage persistence
- */
 export function useSettings() {
   const [settings, setSettings] = useState<UserSettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Load settings on mount
-    const loaded = getSettings()
-    setSettings(loaded)
+    setSettings(getSettings())
     setIsLoading(false)
   }, [])
 
-  const updateSetting = (key: keyof UserSettings, value: unknown) => {
-    setSettings((prev) => {
-      if (!prev) return prev
-      const updated = { ...prev, [key]: value }
-      saveSettings(updated)
-      return updated
-    })
-  }
+  const updateSetting = useCallback(
+    <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const updated = { ...prev, [key]: value }
+        saveSettings(updated)
+        return updated
+      })
+    },
+    [],
+  )
 
-  return {
-    settings,
-    isLoading,
-    updateSetting,
-  }
+  return { settings, isLoading, updateSetting }
 }
 
-/**
- * Hook for managing user statistics
- */
+// ─── Stats + streak ───────────────────────────────────────────────────────────
+
 export function useStats() {
-  const [bestWPM, setBestWPM] = useState(0)
-  const [streak, setStreak] = useState({ current: 0, best: 0 })
+  const [bestWPM,  setBestWPM]  = useState(0)
+  const [streak,   setStreak]   = useState({ current: 0, best: 0 })
+  const [history,  setHistory]  = useState<TypingHistoryEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     setBestWPM(getBestWPM())
-    const streakData = getTypingStreak()
-    setStreak({ current: streakData.current, best: streakData.best })
+    const s = getTypingStreak()
+    setStreak({ current: s.current, best: s.best })
+    setHistory(getHistory())
     setIsLoading(false)
   }, [])
 
-  const recordTest = (
-    wpm: number,
-    accuracy: number,
-    typedCount: number,
-    errors: number,
-    difficulty: string
-  ) => {
-    updateStats(wpm, accuracy, typedCount)
-    addToHistory(wpm, accuracy, Math.round(typedCount / 5), errors, difficulty)
-    updateTypingStreak()
+  const recordTest = useCallback(
+    (
+      wpm: number,
+      accuracy: number,
+      typedCount: number,
+      errors: number,
+      difficulty: string,
+      wpmSamples: number[] = [],
+    ) => {
+      updateStats(wpm, accuracy, typedCount)
+      addToHistory(wpm, accuracy, Math.round(typedCount / 5), errors, difficulty, wpmSamples)
+      updateTypingStreak()
 
-    // Update local state
-    setBestWPM((prev) => Math.max(prev, wpm))
-    const streakData = getTypingStreak()
-    setStreak({ current: streakData.current, best: streakData.best })
-  }
+      setBestWPM((prev) => Math.max(prev, wpm))
+      const s = getTypingStreak()
+      setStreak({ current: s.current, best: s.best })
+      setHistory(getHistory())
+    },
+    [],
+  )
 
-  return {
-    bestWPM,
-    streak,
-    isLoading,
-    recordTest,
-  }
+  return { bestWPM, streak, history, isLoading, recordTest }
 }

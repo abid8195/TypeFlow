@@ -28,6 +28,8 @@
   --animate-fade-in:      fade-in 0.2s ease-out;
   --animate-slide-up:     slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   --animate-cursor-blink: cursor-blink 1.1s step-end infinite;
+  --animate-shake:        shake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  --animate-word-flash:   word-flash 0.4s ease-out forwards;
 
   @keyframes pulse-subtle {
     0%, 100% { opacity: 1; }
@@ -44,6 +46,22 @@
   @keyframes cursor-blink {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0; }
+  }
+  /* Horizontal shake — applied to the current word on error */
+  @keyframes shake {
+    0%  { transform: translateX(0); }
+    15% { transform: translateX(-5px); }
+    30% { transform: translateX(5px); }
+    45% { transform: translateX(-4px); }
+    60% { transform: translateX(4px); }
+    75% { transform: translateX(-2px); }
+    90% { transform: translateX(2px); }
+    100%{ transform: translateX(0); }
+  }
+  /* Green flash when a word is completed correctly */
+  @keyframes word-flash {
+    0%   { color: var(--success); opacity: 1; }
+    100% { opacity: 0.45; }
   }
 }
 
@@ -146,9 +164,14 @@ a:focus-visible {
   border-width: 0;
 }
 
-/* ─── Typing words transition ──────────────────────────────────────────────── */
+/* ─── Typing area ─────────────────────────────────────────────────────────── */
 .words-inner {
   transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Progress bar inner fill */
+.progress-fill {
+  transition: width 0.3s ease-out;
 }
 
 /* Dark mode */

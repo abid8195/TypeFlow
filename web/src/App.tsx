@@ -1,74 +1,108 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Navbar } from './components/Navbar'
-import { TypingArea } from './components/TypingArea'
-import { Timer } from './components/Timer'
-import { StatsPanel } from './components/StatsPanel'
-import { DurationSelector } from './components/DurationSelector'
+import { Navbar }             from './components/Navbar'
+import { TypingArea }         from './components/TypingArea'
+import { Timer }              from './components/Timer'
+import { StatsPanel }         from './components/StatsPanel'
+import { DurationSelector }   from './components/DurationSelector'
 import { DifficultySelector } from './components/DifficultySelector'
-import { ResultsModal } from './components/ResultsModal'
-import { SettingsModal } from './components/SettingsModal'
-import { Footer } from './components/Footer'
+import { ResultsModal }       from './components/ResultsModal'
+import { SettingsModal }      from './components/SettingsModal'
+import { Footer }             from './components/Footer'
 import { useSettings, useStats } from './hooks/usePersistence'
-import { difficulties } from './data/words'
-import { generateWords, calculateAccuracy } from './utils/typing'
+import { useSound }           from './hooks/useSound'
+import { difficulties, type DifficultyLevel } from './data/words'
+import {
+  generateWords,
+  generateQuoteWords,
+  calculateAccuracy,
+  WORD_BUFFER_SIZE,
+  MIN_ELAPSED_MINS,
+  STATS_INTERVAL_MS,
+} from './utils/typing'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+/** Whether each completed word was correct, incorrect, or skipped. */
+export type WordOutcome = 'correct' | 'incorrect' | 'skipped'
 
 interface TestState {
-  isActive: boolean
-  testWords: string[]
-  userInput: string
+  isActive:         boolean
+  testWords:        string[]
+  userInput:        string
   currentWordIndex: number
-  startTime: number | null
-  wpm: number
-  accuracy: number
-  errors: number
-  correctChars: number
-  totalChars: number
-  wordResults: boolean[]   // true = word was typed correctly
+  startTime:        number | null
+  wpm:              number
+  accuracy:         number
+  errors:           number
+  correctChars:     number
+  wordOutcomes:     WordOutcome[]   // replaces boolean[]
 }
 
-interface TestResults {
-  wpm: number
-  accuracy: number
-  errors: number
+export interface TestResults {
+  wpm:          number
+  accuracy:     number
+  errors:       number
   correctChars: number
-  totalChars: number
-  duration: number
+  totalChars:   number
+  duration:     number
+  wpmSamples:   number[]   // per-second WPM for sparkline
+  prevBestWPM:  number     // best WPM *before* this test (for delta)
 }
 
-const INITIAL_STATE: Omit<TestState, 'isActive' | 'testWords'> = {
-  userInput: '',
-  currentWordIndex: 0,
-  startTime: null,
-  wpm: 0,
-  accuracy: 100,
-  errors: 0,
-  correctChars: 0,
-  totalChars: 0,
-  wordResults: [],
+// ─── PWA install prompt type (not in TS lib) ─────────────────────────────────
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+
+const EMPTY_STATE: Omit<TestState, 'isActive' | 'testWords'> = {
+  userInput: '', currentWordIndex: 0, startTime: null,
+  wpm: 0, accuracy: 100, errors: 0, correctChars: 0, wordOutcomes: [],
 }
 
 export default function App() {
-  const { settings, isLoading } = useSettings()
-  const { bestWPM, streak, recordTest } = useStats()
+  const { settings, isLoading, updateSetting } = useSettings()
+  const { bestWPM, streak, history, recordTest } = useStats()
 
-  const [showSettings, setShowSettings] = useState(false)
-  const [showResults, setShowResults] = useState(false)
-  const [testDuration, setTestDuration] = useState(60)
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium')
+  const [showSettings, setShowSettings]   = useState(false)
+  const [showResults,  setShowResults]    = useState(false)
+  const [testDuration, setTestDuration]   = useState(60)
+  const [difficulty,   setDifficulty]     = useState<DifficultyLevel>('medium')
   const [timeRemaining, setTimeRemaining] = useState(60)
-  const [testResults, setTestResults] = useState<TestResults | null>(null)
+  const [testResults,   setTestResults]   = useState<TestResults | null>(null)
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const [showInstall,   setShowInstall]   = useState(false)
 
   const [testState, setTestState] = useState<TestState>({
-    isActive: false,
-    testWords: [],
-    ...INITIAL_STATE,
+    isActive: false, testWords: [], ...EMPTY_STATE,
   })
 
-  const inputRef = useRef<HTMLInputElement>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const statsRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Refs
+  const inputRef      = useRef<HTMLInputElement>(null)
+  const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null)
+  const statsRef      = useRef<ReturnType<typeof setInterval> | null>(null)
+  const wpmSamplesRef = useRef<number[]>([])
+  const bestWPMRef    = useRef(bestWPM)            // snapshot before test ends
+  useEffect(() => { bestWPMRef.current = bestWPM }, [bestWPM])
 
-  // Sync settings on load
+  // Sound (requires user gesture — AudioContext created lazily on first play)
+  const { play: playSound } = useSound(settings?.soundEnabled ?? true)
+
+  // PWA install hook
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setInstallPrompt(e as BeforeInstallPromptEvent)
+      setShowInstall(true)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  // Sync persisted settings on load
   useEffect(() => {
     if (settings) {
       setTestDuration(settings.testDuration)
@@ -77,7 +111,7 @@ export default function App() {
     }
   }, [settings])
 
-  // Countdown
+  // ── Countdown ──
   useEffect(() => {
     if (!testState.isActive) {
       if (timerRef.current) clearInterval(timerRef.current)
@@ -93,107 +127,121 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testState.isActive])
 
-  // Real-time WPM stats
+  // ── Live WPM stats (sampled into wpmSamplesRef every second) ──
   useEffect(() => {
     if (!testState.isActive || !testState.startTime) return
     statsRef.current = setInterval(() => {
       setTestState((prev) => {
         if (!prev.startTime) return prev
-        const mins = Math.max((Date.now() - prev.startTime) / 60000, 0.016)
+        const mins = Math.max((Date.now() - prev.startTime) / 60000, MIN_ELAPSED_MINS)
         let correctWords = 0, correctChars = 0
         for (let i = 0; i < prev.currentWordIndex && i < prev.testWords.length; i++) {
-          if (prev.wordResults[i]) {
+          if (prev.wordOutcomes[i] === 'correct') {
             correctWords++
             correctChars += prev.testWords[i].length
           }
         }
+        const newWPM = Math.round(correctWords / mins)
+        wpmSamplesRef.current.push(newWPM)
         return {
           ...prev,
-          wpm: Math.round(correctWords / mins),
-          accuracy: calculateAccuracy(correctChars, correctChars + prev.errors),
+          wpm:          newWPM,
+          accuracy:     calculateAccuracy(correctChars, correctChars + prev.errors),
           correctChars,
         }
       })
-    }, 200)
+    }, STATS_INTERVAL_MS)
     return () => { if (statsRef.current) clearInterval(statsRef.current) }
   }, [testState.isActive, testState.startTime])
 
+  // ── Start ──
   const startTest = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current)
     if (statsRef.current) clearInterval(statsRef.current)
-    const words = generateWords(difficulties[difficulty].wordPool, 150)
-    setTestState({
-      isActive: true,
-      testWords: words,
-      ...INITIAL_STATE,
-    })
+    wpmSamplesRef.current = []
+
+    const words = difficulty === 'quotes'
+      ? generateQuoteWords(WORD_BUFFER_SIZE)
+      : generateWords(difficulties[difficulty].wordPool, WORD_BUFFER_SIZE)
+
+    setTestState({ isActive: true, testWords: words, ...EMPTY_STATE })
     setTimeRemaining(testDuration)
     setShowResults(false)
     setTimeout(() => inputRef.current?.focus(), 0)
   }, [difficulty, testDuration])
 
+  // ── End ──
   const endTest = useCallback(() => {
     setTestState((prev) => {
       if (!prev.isActive || !prev.startTime) return prev
       const secs = (Date.now() - prev.startTime) / 1000
-      const mins = Math.max(secs / 60, 0.016)
+      const mins = Math.max(secs / 60, MIN_ELAPSED_MINS)
       let correctWords = 0, correctChars = 0
       for (let i = 0; i < prev.currentWordIndex && i < prev.testWords.length; i++) {
-        if (prev.wordResults[i]) {
+        if (prev.wordOutcomes[i] === 'correct') {
           correctWords++
           correctChars += prev.testWords[i].length
         }
       }
       const results: TestResults = {
-        wpm: Math.round(correctWords / mins),
-        accuracy: calculateAccuracy(correctChars, correctChars + prev.errors),
-        errors: prev.errors,
+        wpm:         Math.round(correctWords / mins),
+        accuracy:    calculateAccuracy(correctChars, correctChars + prev.errors),
+        errors:      prev.errors,
         correctChars,
-        totalChars: prev.totalChars,
-        duration: Math.round(secs),
+        totalChars:  prev.testWords.slice(0, prev.currentWordIndex).reduce((s, w) => s + w.length, 0),
+        duration:    Math.round(secs),
+        wpmSamples:  [...wpmSamplesRef.current],
+        prevBestWPM: bestWPMRef.current,
       }
+      recordTest(results.wpm, results.accuracy, correctChars, prev.errors, difficulty, results.wpmSamples)
       setTestResults(results)
-      recordTest(results.wpm, results.accuracy, correctChars, prev.errors, difficulty)
       setShowResults(true)
+      playSound('testEnd')
       if (timerRef.current) clearInterval(timerRef.current)
       if (statsRef.current) clearInterval(statsRef.current)
       return { ...prev, isActive: false }
     })
-  }, [difficulty, recordTest])
+  }, [difficulty, recordTest, playSound])
 
+  // ── Input handler ──
   const handleInput = useCallback((value: string) => {
     setTestState((prev) => {
       if (!prev.isActive) return prev
       if (value.endsWith(' ') && prev.currentWordIndex < prev.testWords.length - 1) {
-        const typed = value.trim()
+        const typed    = value.trim()
         const expected = prev.testWords[prev.currentWordIndex]
         const isCorrect = typed === expected
+        const outcome: WordOutcome = isCorrect ? 'correct' : 'incorrect'
+        if (isCorrect)  playSound('wordCorrect')
+        else            playSound('wordError')
         return {
           ...prev,
-          userInput: '',
+          userInput:        '',
           currentWordIndex: prev.currentWordIndex + 1,
-          errors: prev.errors + (isCorrect ? 0 : 1),
-          wordResults: [...prev.wordResults, isCorrect],
+          errors:           prev.errors + (isCorrect ? 0 : 1),
+          wordOutcomes:     [...prev.wordOutcomes, outcome],
         }
       }
       return { ...prev, userInput: value }
     })
-  }, [])
+  }, [playSound])
 
+  // ── Skip word ──
   const skipWord = useCallback(() => {
     setTestState((prev) => {
       if (prev.currentWordIndex >= prev.testWords.length - 1) return prev
+      playSound('wordError')
       return {
         ...prev,
-        userInput: '',
+        userInput:        '',
         currentWordIndex: prev.currentWordIndex + 1,
-        errors: prev.errors + 1,
-        wordResults: [...prev.wordResults, false],
+        errors:           prev.errors + 1,
+        wordOutcomes:     [...prev.wordOutcomes, 'skipped' as WordOutcome],
       }
     })
-  }, [])
+  }, [playSound])
 
-  // Keyboard shortcuts
+  // ── Keyboard shortcuts ──
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!testState.isActive) return
@@ -208,25 +256,32 @@ export default function App() {
     if (testState.isActive) inputRef.current?.focus()
   }, [testState.isActive])
 
+  // ─── Loading screen ──────────────────────────────────────────────────────────
+
   if (isLoading) {
     return (
       <div className="h-[100svh] w-screen flex items-center justify-center" style={{ background: 'var(--paper)' }}>
         <div className="flex flex-col items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-2xl animate-[pulse-subtle_1s_ease-in-out_infinite]"
-            style={{ background: 'var(--gradient-cta)' }}
-          />
+          <div className="w-10 h-10 rounded-2xl animate-[pulse-subtle_1s_ease-in-out_infinite]" style={{ background: 'var(--gradient-cta)' }} />
           <p style={{ color: 'var(--muted)' }} className="text-sm font-medium">Loading…</p>
         </div>
       </div>
     )
   }
 
+  // ─── Progress (word-based) ────────────────────────────────────────────────────
+
+  const progressPct = testState.testWords.length > 0
+    ? (testState.currentWordIndex / testState.testWords.length) * 100
+    : 0
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <div className="h-[100svh] w-screen flex flex-col overflow-hidden" style={{ background: 'var(--paper)', color: 'var(--ink)' }}>
-      <Navbar bestWPM={bestWPM} streak={streak.current} onSettingsClick={() => setShowSettings(true)} />
+      <Navbar onSettingsClick={() => setShowSettings(true)} />
 
-      {/* Hidden capture input — focused on test start */}
+      {/* ── Single source-of-truth capture input ── */}
       <input
         ref={inputRef}
         type="text"
@@ -241,38 +296,39 @@ export default function App() {
         aria-label="Typing input"
       />
 
+      {/* ── Progress bar ── */}
+      {testState.isActive && (
+        <div className="h-0.5 w-full shrink-0" style={{ background: 'var(--line)' }}>
+          <div
+            className="progress-fill h-full"
+            style={{ width: `${progressPct}%`, background: 'var(--color-cta)' }}
+          />
+        </div>
+      )}
+
       <main className="flex-1 overflow-hidden flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-4" onClick={focusInput}>
 
         {testState.isActive ? (
           /* ── Active test ── */
           <div className="w-full max-w-3xl flex flex-col items-center gap-6">
-            {/* Timer row */}
             <div className="w-full flex items-center justify-between">
               <Timer timeRemaining={timeRemaining} isActive />
-              <StatsPanel
-                wpm={testState.wpm}
-                accuracy={testState.accuracy}
-                errors={testState.errors}
-                isTestActive
-                compact
-              />
+              <StatsPanel wpm={testState.wpm} accuracy={testState.accuracy} errors={testState.errors} isTestActive compact />
             </div>
 
             <TypingArea
               testWords={testState.testWords}
               userInput={testState.userInput}
               currentWordIndex={testState.currentWordIndex}
-              wordResults={testState.wordResults}
+              wordOutcomes={testState.wordOutcomes}
               isTestActive
-              onInputChange={handleInput}
               onSkipWord={skipWord}
             />
 
-            {/* Hints row */}
             <div className="flex items-center gap-6 select-none">
-              <Kbd label="Tab" desc="skip word" />
-              <Kbd label="Space" desc="next word" />
-              <Kbd label="Esc" desc="end test" />
+              <Kbd label="Tab"   desc="skip word" />
+              <Kbd label="Space" desc="next word"  />
+              <Kbd label="Esc"   desc="end test"   />
             </div>
           </div>
         ) : (
@@ -293,53 +349,44 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Stats row */}
+              {/* Stat pills */}
               <div className="flex items-center gap-3 sm:gap-4">
-                <StatPill label="Best WPM" value={bestWPM} color="var(--color-cta)" />
-                <div style={{ width: 1, height: 36, background: 'var(--line)' }} />
-                <StatPill label="Streak" value={streak.current} color="var(--color-cta-alt)" />
-                <div style={{ width: 1, height: 36, background: 'var(--line)' }} />
-                <StatPill label="Duration" value={testDuration >= 60 ? `${testDuration / 60}m` : `${testDuration}s`} color="var(--ink)" />
+                <StatPill label="Best WPM" value={bestWPM}          color="var(--color-cta)"     />
+                <Divider />
+                <StatPill label="Streak"   value={streak.current}   color="var(--color-cta-alt)" />
+                <Divider />
+                <StatPill label="Tests"    value={history.length}   color="var(--ink)"            />
               </div>
 
-              {/* Keyboard hints — desktop only */}
-              <div className="hidden lg:flex flex-col gap-2">
-                <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--muted)' }}>Shortcuts</p>
-                <div className="flex flex-col gap-1.5">
-                  {[
-                    ['Space', 'advance to next word'],
-                    ['Tab', 'skip current word'],
-                    ['Esc', 'end test early'],
-                  ].map(([key, desc]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <kbd
-                        className="px-2 py-0.5 rounded text-[11px] font-mono font-medium"
-                        style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
-                      >
-                        {key}
-                      </kbd>
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>{desc}</span>
-                    </div>
-                  ))}
+              {/* Recent history sparkline — shown after first test */}
+              {history.length >= 2 && (
+                <div className="w-full max-w-xs">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--muted)' }}>
+                    Recent WPM
+                  </p>
+                  <MiniSparkline data={history.slice(-10).map((h) => h.wpm)} />
                 </div>
+              )}
+
+              {/* Desktop shortcut guide */}
+              <div className="hidden lg:flex flex-col gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--muted)' }}>Shortcuts</p>
+                {([['Space', 'next word'], ['Tab', 'skip word'], ['Esc', 'end test']] as const).map(([key, desc]) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <kbd className="px-2 py-0.5 rounded text-[11px] font-mono font-medium" style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}>
+                      {key}
+                    </kbd>
+                    <span className="text-xs" style={{ color: 'var(--muted)' }}>{desc}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
             {/* Right — config card */}
-            <div
-              className="w-full lg:w-[22rem] shrink-0 rounded-[var(--radius-card)] p-6 sm:p-7 flex flex-col gap-5"
-              style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}
-            >
-              <DurationSelector
-                selected={testDuration}
-                onChange={(v) => { setTestDuration(v); setTimeRemaining(v) }}
-              />
+            <div className="w-full lg:w-[22rem] shrink-0 rounded-[var(--radius-card)] p-6 sm:p-7 flex flex-col gap-5" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
+              <DurationSelector selected={testDuration} onChange={(v) => { setTestDuration(v); setTimeRemaining(v); updateSetting('testDuration', v) }} />
               <div style={{ height: 1, background: 'var(--line)' }} />
-              <DifficultySelector
-                selected={difficulty}
-                difficulties={difficulties}
-                onChange={setDifficulty}
-              />
+              <DifficultySelector selected={difficulty} difficulties={difficulties} onChange={(v) => { setDifficulty(v); updateSetting('difficulty', v) }} />
               <button
                 onClick={startTest}
                 className="w-full py-4 rounded-[var(--radius-btn)] font-bold text-xl tracking-tight hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] transition-all duration-150"
@@ -347,11 +394,35 @@ export default function App() {
               >
                 Start Test
               </button>
-              <p className="text-center text-xs" style={{ color: 'var(--muted)' }}>
-                Press any key to start
-              </p>
+              <p className="text-center text-xs" style={{ color: 'var(--muted)' }}>or press any key to begin</p>
             </div>
+          </div>
+        )}
 
+        {/* PWA install banner */}
+        {showInstall && !testState.isActive && (
+          <div
+            className="absolute bottom-14 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-[var(--radius-btn)] shadow-lg animate-[slide-up_0.3s_ease-out]"
+            style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}
+          >
+            <p className="text-sm" style={{ color: 'var(--ink)' }}>Add TypeFlow to your home screen</p>
+            <button
+              onClick={async () => {
+                await installPrompt?.prompt()
+                setShowInstall(false)
+              }}
+              className="px-3 py-1.5 rounded text-sm font-semibold min-h-0"
+              style={{ background: 'var(--gradient-cta)', color: 'var(--paper)' }}
+            >
+              Install
+            </button>
+            <button
+              onClick={() => setShowInstall(false)}
+              className="min-h-0 text-xs px-2 py-1"
+              style={{ color: 'var(--muted)' }}
+            >
+              ✕
+            </button>
           </div>
         )}
       </main>
@@ -367,13 +438,15 @@ export default function App() {
       />
       <SettingsModal
         isOpen={showSettings}
+        soundEnabled={settings?.soundEnabled ?? true}
+        onSoundToggle={(v) => updateSetting('soundEnabled', v)}
         onClose={() => setShowSettings(false)}
       />
     </div>
   )
 }
 
-/* ── Small shared sub-components ── */
+// ─── Small shared sub-components ─────────────────────────────────────────────
 
 function StatPill({ label, value, color }: { label: string; value: number | string; color: string }) {
   return (
@@ -386,16 +459,34 @@ function StatPill({ label, value, color }: { label: string; value: number | stri
   )
 }
 
+function Divider() {
+  return <div style={{ width: 1, height: 36, background: 'var(--line)' }} />
+}
+
 function Kbd({ label, desc }: { label: string; desc: string }) {
   return (
     <div className="flex items-center gap-1.5">
-      <kbd
-        className="px-2 py-1 rounded text-[11px] font-mono font-medium"
-        style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
-      >
+      <kbd className="px-2 py-1 rounded text-[11px] font-mono font-medium" style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}>
         {label}
       </kbd>
       <span className="text-xs hidden sm:inline" style={{ color: 'var(--muted)' }}>{desc}</span>
     </div>
+  )
+}
+
+/** Tiny inline sparkline of the last N WPM values — pure SVG, no libraries. */
+function MiniSparkline({ data }: { data: number[] }) {
+  if (data.length < 2) return null
+  const W = 260, H = 32
+  const max = Math.max(...data)
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const pts = data
+    .map((v, i) => `${(i / (data.length - 1)) * W},${H - ((v - min) / range) * (H - 4) - 2}`)
+    .join(' ')
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, overflow: 'visible' }} aria-hidden>
+      <polyline points={pts} fill="none" stroke="var(--color-cta)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+    </svg>
   )
 }

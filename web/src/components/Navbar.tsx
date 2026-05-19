@@ -1,6 +1,4 @@
 interface NavbarProps {
-  bestWPM: number
-  streak: number
   onSettingsClick: () => void
 }
 
