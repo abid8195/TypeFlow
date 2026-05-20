@@ -12,6 +12,8 @@ interface TypingAreaProps {
 
 type CharStatus = 'correct' | 'incorrect' | 'pending' | 'extra'
 
+// ─── Per-status char styling ──────────────────────────────────────────────────
+
 const CHAR_COLOR: Record<CharStatus, string> = {
   correct:   'var(--success)',
   incorrect: 'var(--error)',
@@ -19,7 +21,14 @@ const CHAR_COLOR: Record<CharStatus, string> = {
   extra:     'var(--error)',
 }
 
-const LINE_HEIGHT_PX = 44
+// Subtle glow to reinforce the keystroke feedback visually
+const CHAR_GLOW: Partial<Record<CharStatus, string>> = {
+  correct:   '0 0 10px color-mix(in srgb, var(--success) 55%, transparent)',
+  incorrect: '0 0 8px  color-mix(in srgb, var(--error)   50%, transparent)',
+  extra:     '0 0 8px  color-mix(in srgb, var(--error)   50%, transparent)',
+}
+
+const LINE_HEIGHT_PX = 48
 const VISIBLE_LINES  = 3
 
 export function TypingArea({
@@ -33,14 +42,17 @@ export function TypingArea({
   const innerRef = useRef<HTMLDivElement>(null)
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([])
 
-  // Track which word just flashed (correct completion) for CSS animation
+  // Track which word just flashed (correct completion)
   const [flashIndex, setFlashIndex] = useState<number | null>(null)
   // Track whether to shake current word (error input)
-  const [shaking, setShaking] = useState(false)
+  const [shaking, setShaking]       = useState(false)
+  // Track the previously-correct char count to trigger pop animation
+  const [lastCorrectLen, setLastCorrectLen] = useState(0)
+
   const prevOutcomesLen = useRef(0)
   const prevUserInput   = useRef('')
 
-  // Detect a newly completed word → flash if correct, shake parent if incorrect
+  // Detect a newly completed word → flash if correct
   useEffect(() => {
     if (wordOutcomes.length > prevOutcomesLen.current) {
       const newOutcome = wordOutcomes[wordOutcomes.length - 1]
@@ -52,16 +64,21 @@ export function TypingArea({
     prevOutcomesLen.current = wordOutcomes.length
   }, [wordOutcomes])
 
-  // Detect a new incorrect character typed → shake the word
+  // Detect new character typed — shake on error, pop on correct
   useEffect(() => {
     const prev = prevUserInput.current
     const curr = userInput
     if (curr.length > prev.length) {
-      const newChar = curr[curr.length - 1]
-      const expected = testWords[currentWordIndex]?.[curr.length - 1]
-      if (expected !== undefined && newChar !== expected) {
-        setShaking(true)
-        setTimeout(() => setShaking(false), 360)
+      const newChar   = curr[curr.length - 1]
+      const expected  = testWords[currentWordIndex]?.[curr.length - 1]
+      if (expected !== undefined) {
+        if (newChar !== expected) {
+          setShaking(true)
+          setTimeout(() => setShaking(false), 360)
+        } else {
+          // Trigger pop on the newly-correct char by bumping key counter
+          setLastCorrectLen(curr.length)
+        }
       }
     }
     prevUserInput.current = curr
@@ -100,10 +117,17 @@ export function TypingArea({
         style={{ height: `${LINE_HEIGHT_PX * VISIBLE_LINES}px`, overflow: 'hidden' }}
       >
         {/* Top fade */}
-        <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none" style={{ height: '1.5rem', background: 'linear-gradient(to bottom, var(--paper), transparent)' }} />
+        <div
+          className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
+          style={{ height: '2rem', background: 'linear-gradient(to bottom, var(--paper), transparent)' }}
+        />
 
         {/* Inner scrolling strip */}
-        <div ref={innerRef} className="words-inner absolute inset-x-0 top-0" style={{ lineHeight: `${LINE_HEIGHT_PX}px` }}>
+        <div
+          ref={innerRef}
+          className="words-inner absolute inset-x-0 top-0"
+          style={{ lineHeight: `${LINE_HEIGHT_PX}px` }}
+        >
           {testWords.map((word, wi) => {
             const isCurrentWord = wi === currentWordIndex
             const isCompleted   = wi < currentWordIndex
@@ -115,7 +139,11 @@ export function TypingArea({
                 key={wi}
                 ref={(el) => { wordRefs.current[wi] = el }}
                 className="inline-block mr-3"
-                style={{ fontSize: '1.375rem', fontFamily: 'monospace', letterSpacing: '0.01em' }}
+                style={{
+                  fontSize: 'clamp(1.2rem, 2vw, 1.5rem)',
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.02em',
+                }}
               >
                 {isCurrentWord ? (
                   /* ── Active word ── */
@@ -126,31 +154,52 @@ export function TypingArea({
                       animation: shaking ? 'shake 0.35s cubic-bezier(0.36,0.07,0.19,0.97)' : undefined,
                     }}
                   >
-                    {Array.from(testWords[currentWordIndex]).map((char, ci) => (
+                    {Array.from(testWords[currentWordIndex]).map((char, ci) => {
+                      const status = charStatuses[ci] ?? 'pending'
+                      // Re-mount char span when it pops (correct keystroke) to trigger animation
+                      const isJustTyped = status === 'correct' && ci === lastCorrectLen - 1
+                      return (
+                        <span
+                          key={`${ci}-${isJustTyped ? 'pop' : 'idle'}`}
+                          style={{
+                            color:      CHAR_COLOR[status],
+                            textShadow: CHAR_GLOW[status],
+                            transition: 'color 60ms ease, text-shadow 60ms ease',
+                            display:    'inline-block',
+                            animation:  isJustTyped ? 'char-pop 0.18s cubic-bezier(0.34,1.56,0.64,1)' : undefined,
+                          }}
+                        >
+                          {char}
+                        </span>
+                      )
+                    })}
+                    {/* Extra chars beyond word length */}
+                    {userInput.slice(testWords[currentWordIndex].length).split('').map((char, ci) => (
                       <span
-                        key={ci}
-                        style={{ color: CHAR_COLOR[charStatuses[ci] ?? 'pending'], transition: 'color 50ms ease' }}
+                        key={`ex-${ci}`}
+                        style={{
+                          color: CHAR_COLOR.extra,
+                          textShadow: CHAR_GLOW.extra,
+                          opacity: 0.7,
+                          display: 'inline-block',
+                        }}
                       >
                         {char}
                       </span>
-                    ))}
-                    {/* Extra chars */}
-                    {userInput.slice(testWords[currentWordIndex].length).split('').map((char, ci) => (
-                      <span key={`ex-${ci}`} style={{ color: CHAR_COLOR.extra, opacity: 0.65 }}>{char}</span>
                     ))}
                     {/* Blinking cursor */}
                     <span
                       className="animate-[cursor-blink_1.1s_step-end_infinite]"
                       style={{
-                        display: 'inline-block',
-                        width: '2px',
-                        height: '1.3em',
+                        display:      'inline-block',
+                        width:        '2px',
+                        height:       '1.25em',
                         verticalAlign: 'text-bottom',
-                        background: 'var(--color-cta)',
+                        background:   'var(--color-cta)',
                         borderRadius: '1px',
-                        marginLeft: userInput.length > 0 ? '1px' : '-1px',
-                        marginRight: '1px',
-                        boxShadow: '0 0 6px var(--color-cta)',
+                        marginLeft:   userInput.length > 0 ? '1px' : '-1px',
+                        marginRight:  '1px',
+                        boxShadow:    '0 0 8px 1px var(--color-cta), 0 0 18px var(--color-cta)',
                       }}
                     />
                   </span>
@@ -158,10 +207,11 @@ export function TypingArea({
                   /* ── Completed word ── */
                   <span
                     style={{
-                      color: outcome === 'correct' ? 'var(--success)' : 'var(--error)',
-                      opacity: isFlashing ? 1 : 0.45,
-                      animation: isFlashing ? 'word-flash 0.4s ease-out forwards' : undefined,
-                      transition: 'opacity 0.2s ease',
+                      color:          outcome === 'correct' ? 'var(--success)' : 'var(--error)',
+                      textShadow:     isFlashing ? CHAR_GLOW.correct : undefined,
+                      opacity:        isFlashing ? 1 : 0.45,
+                      animation:      isFlashing ? 'word-flash 0.4s ease-out forwards' : undefined,
+                      transition:     'opacity 0.2s ease',
                       textDecoration: outcome === 'skipped' ? 'line-through' : undefined,
                     }}
                   >
@@ -169,7 +219,7 @@ export function TypingArea({
                   </span>
                 ) : (
                   /* ── Upcoming word ── */
-                  <span style={{ color: 'var(--muted)' }}>{word}</span>
+                  <span style={{ color: 'var(--muted)', opacity: 0.65 }}>{word}</span>
                 )}
               </span>
             )
@@ -177,7 +227,10 @@ export function TypingArea({
         </div>
 
         {/* Bottom fade */}
-        <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none" style={{ height: '2.5rem', background: 'linear-gradient(to top, var(--paper), transparent)' }} />
+        <div
+          className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
+          style={{ height: '3rem', background: 'linear-gradient(to top, var(--paper), transparent)' }}
+        />
       </div>
 
       {/* ── Skip button ── */}
@@ -186,8 +239,13 @@ export function TypingArea({
           onClick={onSkipWord}
           disabled={!isTestActive}
           className="px-4 py-2 rounded-[var(--radius-btn)] text-xs font-semibold uppercase tracking-widest transition-all duration-150 hover:scale-[1.03] active:scale-[0.97]"
-          style={{ border: '1px solid var(--line)', color: 'var(--muted)', background: 'transparent', minHeight: '36px' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--glass)' }}
+          style={{
+            border:     '1px solid var(--line)',
+            color:      'var(--muted)',
+            background: 'transparent',
+            minHeight:  '36px',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--panel)' }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
         >
           Skip word

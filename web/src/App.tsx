@@ -35,7 +35,8 @@ interface TestState {
   accuracy:         number
   errors:           number
   correctChars:     number
-  wordOutcomes:     WordOutcome[]   // replaces boolean[]
+  wordOutcomes:     WordOutcome[]
+  combo:            number   // consecutive correct words
 }
 
 export interface TestResults {
@@ -45,11 +46,39 @@ export interface TestResults {
   correctChars: number
   totalChars:   number
   duration:     number
-  wpmSamples:   number[]   // per-second WPM for sparkline
-  prevBestWPM:  number     // best WPM *before* this test (for delta)
+  wpmSamples:   number[]
+  prevBestWPM:  number
 }
 
-// ─── PWA install prompt type (not in TS lib) ─────────────────────────────────
+// ─── Levels ───────────────────────────────────────────────────────────────────
+
+export interface TypingLevel {
+  min:   number
+  label: string
+  emoji: string
+  color: string
+}
+
+export const TYPING_LEVELS: TypingLevel[] = [
+  { min: 160, label: 'Legend',       emoji: '🔮', color: 'var(--color-cta-alt)' },
+  { min: 130, label: 'Master',       emoji: '💎', color: 'var(--color-cta)'     },
+  { min: 100, label: 'Expert',       emoji: '⚡', color: '#22d3ee'              },
+  { min: 75,  label: 'Advanced',     emoji: '🔥', color: 'var(--success)'       },
+  { min: 50,  label: 'Proficient',   emoji: '🚀', color: 'var(--success)'       },
+  { min: 30,  label: 'Novice',       emoji: '📈', color: 'var(--warning)'       },
+  { min: 0,   label: 'Beginner',     emoji: '🌱', color: 'var(--muted)'         },
+]
+
+export function getLevelForWPM(wpm: number): TypingLevel {
+  return TYPING_LEVELS.find((l) => wpm >= l.min) ?? TYPING_LEVELS[TYPING_LEVELS.length - 1]
+}
+
+export function getNextLevel(wpm: number): TypingLevel | null {
+  const idx = TYPING_LEVELS.findIndex((l) => wpm >= l.min)
+  return idx > 0 ? TYPING_LEVELS[idx - 1] : null
+}
+
+// ─── PWA install prompt type ──────────────────────────────────────────────────
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -60,7 +89,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 const EMPTY_STATE: Omit<TestState, 'isActive' | 'testWords'> = {
   userInput: '', currentWordIndex: 0, startTime: null,
-  wpm: 0, accuracy: 100, errors: 0, correctChars: 0, wordOutcomes: [],
+  wpm: 0, accuracy: 100, errors: 0, correctChars: 0, wordOutcomes: [], combo: 0,
 }
 
 export default function App() {
@@ -85,10 +114,9 @@ export default function App() {
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const statsRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const wpmSamplesRef = useRef<number[]>([])
-  const bestWPMRef    = useRef(bestWPM)            // snapshot before test ends
+  const bestWPMRef    = useRef(bestWPM)
   useEffect(() => { bestWPMRef.current = bestWPM }, [bestWPM])
 
-  // Sound (requires user gesture — AudioContext created lazily on first play)
   const { play: playSound } = useSound(settings?.soundEnabled ?? true)
 
   // PWA install hook
@@ -127,7 +155,7 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testState.isActive])
 
-  // ── Live WPM stats (sampled into wpmSamplesRef every second) ──
+  // ── Live WPM stats ──
   useEffect(() => {
     if (!testState.isActive || !testState.startTime) return
     statsRef.current = setInterval(() => {
@@ -207,6 +235,9 @@ export default function App() {
   const handleInput = useCallback((value: string) => {
     setTestState((prev) => {
       if (!prev.isActive) return prev
+      // Start timer on first keystroke
+      const startTime = prev.startTime ?? Date.now()
+
       if (value.endsWith(' ') && prev.currentWordIndex < prev.testWords.length - 1) {
         const typed    = value.trim()
         const expected = prev.testWords[prev.currentWordIndex]
@@ -214,15 +245,18 @@ export default function App() {
         const outcome: WordOutcome = isCorrect ? 'correct' : 'incorrect'
         if (isCorrect)  playSound('wordCorrect')
         else            playSound('wordError')
+        const newCombo = isCorrect ? prev.combo + 1 : 0
         return {
           ...prev,
+          startTime,
           userInput:        '',
           currentWordIndex: prev.currentWordIndex + 1,
           errors:           prev.errors + (isCorrect ? 0 : 1),
           wordOutcomes:     [...prev.wordOutcomes, outcome],
+          combo:            newCombo,
         }
       }
-      return { ...prev, userInput: value }
+      return { ...prev, startTime, userInput: value }
     })
   }, [playSound])
 
@@ -237,6 +271,7 @@ export default function App() {
         currentWordIndex: prev.currentWordIndex + 1,
         errors:           prev.errors + 1,
         wordOutcomes:     [...prev.wordOutcomes, 'skipped' as WordOutcome],
+        combo:            0,
       }
     })
   }, [playSound])
@@ -256,7 +291,7 @@ export default function App() {
     if (testState.isActive) inputRef.current?.focus()
   }, [testState.isActive])
 
-  // ─── Loading screen ──────────────────────────────────────────────────────────
+  // ─── Loading screen ───────────────────────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -269,11 +304,19 @@ export default function App() {
     )
   }
 
-  // ─── Progress (word-based) ────────────────────────────────────────────────────
+  // ─── Derived values ───────────────────────────────────────────────────────────
 
   const progressPct = testState.testWords.length > 0
     ? (testState.currentWordIndex / testState.testWords.length) * 100
     : 0
+
+  const currentLevel = getLevelForWPM(bestWPM)
+  const nextLevel    = getNextLevel(bestWPM)
+
+  // Progress to next level (0–1)
+  const levelProgress = nextLevel
+    ? Math.min((bestWPM - currentLevel.min) / (nextLevel.min - currentLevel.min), 1)
+    : 1
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -301,19 +344,34 @@ export default function App() {
         <div className="h-0.5 w-full shrink-0" style={{ background: 'var(--line)' }}>
           <div
             className="progress-fill h-full"
-            style={{ width: `${progressPct}%`, background: 'var(--color-cta)' }}
+            style={{ width: `${progressPct}%`, background: 'var(--gradient-brand)' }}
           />
         </div>
       )}
 
-      <main className="flex-1 overflow-hidden flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-4" onClick={focusInput}>
+      <main className="flex-1 overflow-hidden flex flex-col items-center justify-center px-4 sm:px-6 lg:px-10 py-4 sm:py-6" onClick={focusInput}>
 
         {testState.isActive ? (
           /* ── Active test ── */
-          <div className="w-full max-w-3xl flex flex-col items-center gap-6">
-            <div className="w-full flex items-center justify-between">
+          <div className="w-full max-w-3xl flex flex-col items-center gap-5">
+
+            {/* Timer row */}
+            <div className="w-full flex items-center justify-between gap-4">
               <Timer timeRemaining={timeRemaining} isActive />
-              <StatsPanel wpm={testState.wpm} accuracy={testState.accuracy} errors={testState.errors} isTestActive compact />
+              <div className="flex items-center gap-4">
+                {/* Combo badge */}
+                {testState.combo >= 3 && (
+                  <div
+                    key={testState.combo}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold animate-[combo-pop_0.2s_cubic-bezier(0.34,1.56,0.64,1)]"
+                    style={{ background: 'color-mix(in srgb, var(--success) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--success) 35%, transparent)', color: 'var(--success)' }}
+                  >
+                    <span className="text-base">🔥</span>
+                    <span>{testState.combo}×</span>
+                  </div>
+                )}
+                <StatsPanel wpm={testState.wpm} accuracy={testState.accuracy} errors={testState.errors} isTestActive compact />
+              </div>
             </div>
 
             <TypingArea
@@ -325,7 +383,7 @@ export default function App() {
               onSkipWord={skipWord}
             />
 
-            <div className="flex items-center gap-6 select-none">
+            <div className="flex items-center gap-5 sm:gap-8 select-none">
               <Kbd label="Tab"   desc="skip word" />
               <Kbd label="Space" desc="next word"  />
               <Kbd label="Esc"   desc="end test"   />
@@ -333,43 +391,60 @@ export default function App() {
           </div>
         ) : (
           /* ── Pre-test lobby ── */
-          <div className="w-full max-w-4xl flex flex-col lg:flex-row items-center lg:items-start gap-8 lg:gap-16">
+          <div className="w-full max-w-6xl flex flex-col md:flex-row items-center md:items-stretch gap-8 md:gap-10 xl:gap-16">
 
             {/* Left — hero */}
-            <div className="flex-1 flex flex-col items-center lg:items-start gap-6 pt-0 lg:pt-2">
-              <div className="text-center lg:text-left">
+            <div className="flex-1 flex flex-col items-center md:items-start gap-5 md:gap-6 pt-0 md:pt-2 md:justify-center">
+
+              {/* Title */}
+              <div className="text-center md:text-left">
                 <h1
-                  className="font-bold text-5xl sm:text-6xl lg:text-7xl leading-none mb-3"
-                  style={{ fontFamily: "'Fraunces', Georgia, serif", background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}
+                  className="font-bold leading-none mb-3"
+                  style={{
+                    fontFamily: "'Fraunces', Georgia, serif",
+                    fontSize: 'clamp(3rem, 7vw, 5.5rem)',
+                    background: 'var(--gradient-brand)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
                 >
                   TypeFlow
                 </h1>
-                <p className="text-base sm:text-lg" style={{ color: 'var(--muted)' }}>
-                  Measure your speed. Build your streak.
+                <p className="text-base sm:text-lg" style={{ color: 'var(--muted)', maxWidth: '30ch' }}>
+                  Measure your speed. Level up your skills.
                 </p>
               </div>
 
+              {/* Level badge */}
+              <LevelBadge
+                level={currentLevel}
+                nextLevel={nextLevel}
+                bestWPM={bestWPM}
+                progress={levelProgress}
+              />
+
               {/* Stat pills */}
-              <div className="flex items-center gap-3 sm:gap-4">
-                <StatPill label="Best WPM" value={bestWPM}          color="var(--color-cta)"     />
+              <div className="flex items-center gap-3 sm:gap-5 flex-wrap justify-center md:justify-start">
+                <StatPill label="Best WPM" value={bestWPM}        color={currentLevel.color}       />
                 <Divider />
-                <StatPill label="Streak"   value={streak.current}   color="var(--color-cta-alt)" />
+                <StatPill label="Streak"   value={streak.current} color="var(--color-cta-alt)"     />
                 <Divider />
-                <StatPill label="Tests"    value={history.length}   color="var(--ink)"            />
+                <StatPill label="Tests"    value={history.length} color="var(--ink)"                />
               </div>
 
-              {/* Recent history sparkline — shown after first test */}
+              {/* Recent history sparkline */}
               {history.length >= 2 && (
-                <div className="w-full max-w-xs">
+                <div className="w-full max-w-xs md:max-w-sm">
                   <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--muted)' }}>
                     Recent WPM
                   </p>
-                  <MiniSparkline data={history.slice(-10).map((h) => h.wpm)} />
+                  <MiniSparkline data={history.slice(-12).map((h) => h.wpm)} />
                 </div>
               )}
 
               {/* Desktop shortcut guide */}
-              <div className="hidden lg:flex flex-col gap-2">
+              <div className="hidden md:flex flex-col gap-2 mt-1">
                 <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--muted)' }}>Shortcuts</p>
                 {([['Space', 'next word'], ['Tab', 'skip word'], ['Esc', 'end test']] as const).map(([key, desc]) => (
                   <div key={key} className="flex items-center gap-2">
@@ -383,16 +458,32 @@ export default function App() {
             </div>
 
             {/* Right — config card */}
-            <div className="w-full lg:w-[22rem] shrink-0 rounded-[var(--radius-card)] p-6 sm:p-7 flex flex-col gap-5" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
+            <div
+              className="w-full md:w-[24rem] xl:w-[26rem] shrink-0 rounded-[var(--radius-card)] p-6 sm:p-7 flex flex-col gap-5"
+              style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}
+            >
+              {/* Card header */}
+              <div className="flex items-center gap-2 pb-1">
+                <div className="w-2 h-2 rounded-full animate-[pulse-subtle_2s_ease_infinite]" style={{ background: 'var(--color-cta)' }} />
+                <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--muted)' }}>Configure test</span>
+              </div>
+
               <DurationSelector selected={testDuration} onChange={(v) => { setTestDuration(v); setTimeRemaining(v); updateSetting('testDuration', v) }} />
               <div style={{ height: 1, background: 'var(--line)' }} />
               <DifficultySelector selected={difficulty} difficulties={difficulties} onChange={(v) => { setDifficulty(v); updateSetting('difficulty', v) }} />
+
               <button
                 onClick={startTest}
-                className="w-full py-4 rounded-[var(--radius-btn)] font-bold text-xl tracking-tight hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] transition-all duration-150"
-                style={{ fontFamily: "'Fraunces', Georgia, serif", background: 'var(--gradient-cta)', color: 'var(--paper)', boxShadow: 'var(--shadow-cta)' }}
+                className="w-full py-4 rounded-[var(--radius-btn)] font-bold tracking-tight hover:opacity-92 hover:scale-[1.02] active:scale-[0.97] transition-all duration-150"
+                style={{
+                  fontFamily: "'Fraunces', Georgia, serif",
+                  fontSize: 'clamp(1.1rem, 2vw, 1.35rem)',
+                  background: 'var(--gradient-cta)',
+                  color: 'var(--paper)',
+                  boxShadow: 'var(--shadow-cta-lg)',
+                }}
               >
-                Start Test
+                Start Typing →
               </button>
               <p className="text-center text-xs" style={{ color: 'var(--muted)' }}>or press any key to begin</p>
             </div>
@@ -446,6 +537,65 @@ export default function App() {
   )
 }
 
+// ─── Level badge ──────────────────────────────────────────────────────────────
+
+function LevelBadge({
+  level,
+  nextLevel,
+  bestWPM,
+  progress,
+}: {
+  level: TypingLevel
+  nextLevel: TypingLevel | null
+  bestWPM: number
+  progress: number
+}) {
+  return (
+    <div
+      className="flex flex-col gap-2 p-3.5 rounded-2xl w-full max-w-xs md:max-w-sm"
+      style={{ background: 'color-mix(in srgb, var(--panel) 80%, transparent)', border: '1px solid var(--line)' }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="text-2xl" aria-hidden>{level.emoji}</span>
+          <div>
+            <p className="font-bold text-base leading-tight" style={{ color: level.color }}>
+              {level.label}
+            </p>
+            <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+              {bestWPM > 0 ? `${bestWPM} WPM best` : 'Complete a test'}
+            </p>
+          </div>
+        </div>
+        {nextLevel && (
+          <p className="text-xs text-right shrink-0" style={{ color: 'var(--muted)' }}>
+            Next: <span className="font-semibold" style={{ color: nextLevel.color }}>{nextLevel.label}</span>
+            <br />
+            <span className="text-[11px]">at {nextLevel.min} WPM</span>
+          </p>
+        )}
+        {!nextLevel && (
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--color-cta-alt) 15%, transparent)', color: 'var(--color-cta-alt)' }}>
+            MAX
+          </span>
+        )}
+      </div>
+      {/* Progress bar to next level */}
+      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--line)' }}>
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width: `${progress * 100}%`,
+            background: nextLevel
+              ? `linear-gradient(90deg, ${level.color}, ${nextLevel.color})`
+              : 'var(--gradient-brand)',
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── Small shared sub-components ─────────────────────────────────────────────
 
 function StatPill({ label, value, color }: { label: string; value: number | string; color: string }) {
@@ -474,19 +624,33 @@ function Kbd({ label, desc }: { label: string; desc: string }) {
   )
 }
 
-/** Tiny inline sparkline of the last N WPM values — pure SVG, no libraries. */
+/** Tiny inline sparkline — pure SVG. */
 function MiniSparkline({ data }: { data: number[] }) {
   if (data.length < 2) return null
-  const W = 260, H = 32
+  const W = 280, H = 36
   const max = Math.max(...data)
   const min = Math.min(...data, 0)
   const range = max - min || 1
   const pts = data
-    .map((v, i) => `${(i / (data.length - 1)) * W},${H - ((v - min) / range) * (H - 4) - 2}`)
+    .map((v, i) => `${(i / (data.length - 1)) * W},${H - ((v - min) / range) * (H - 6) - 3}`)
     .join(' ')
+  const areaEnd = `${W},${H} 0,${H}`
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, overflow: 'visible' }} aria-hidden>
-      <polyline points={pts} fill="none" stroke="var(--color-cta)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+      <polyline
+        points={`${pts} ${areaEnd}`}
+        fill="color-mix(in srgb, var(--color-cta) 12%, transparent)"
+        stroke="none"
+      />
+      <polyline
+        points={pts}
+        fill="none"
+        stroke="var(--color-cta)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.8"
+      />
     </svg>
   )
 }
